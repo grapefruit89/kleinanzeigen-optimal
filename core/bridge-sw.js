@@ -189,40 +189,63 @@
         }
     }
 
+
+    // Port-Probe (2026-09-09, Anti-Spam): ein fehlgeschlagener WebSocket-
+    // Aufbau loggt UNABFANGBAR ERR_CONNECTION_REFUSED in die Extension-
+    // Fehlerliste (Spam alle 5s, solange kein Adapter laeuft). fetch()
+    // ist dagegen catchable und hinterlaesst keinen Fehler-Eintrag.
+    async function adapterPortOpen() {
+        try {
+            await fetch('http://127.0.0.1:8765/', { mode: 'no-cors', signal: AbortSignal.timeout(2000) });
+            return true; // Verbindung steht (Upgrade-Handshake macht danach WS)
+        } catch (e) {
+            return false; // ECONNREFUSED o.ae. — kein WS-Versuch, kein Spam
+        }
+    }
+
     function connect() {
         if (connecting || (ws && ws.readyState === WebSocket.OPEN)) return;
         connecting = true;
-        try {
-            ws = new WebSocket('ws://127.0.0.1:8765');
-        } catch (e) {
-            connecting = false;
-            scheduleReconnect();
-            return;
-        }
-        ws.onopen = () => {
-            console.log('[KA Bridge-SW] Verbunden mit 127.0.0.1:8765 (JSON-RPC 2.0)');
-            connecting = false;
-        };
-        ws.onmessage = (event) => {
-            let msg;
-            try { msg = JSON.parse(event.data); } catch (e) { return; }
-            if (msg.token !== bridgeToken) {
-                if (msg.id !== undefined) rpcError(msg.id, -32001, 'unauthorized');
+        adapterPortOpen().then((open) => {
+            if (!open) {
+                connecting = false;
+                scheduleReconnect();
                 return;
             }
-            rpcHandle(msg);
-        };
-        ws.onclose = () => {
-            connecting = false;
-            scheduleReconnect();
-        };
-        ws.onerror = () => {
-            try { ws.close(); } catch (e) { /* ignore */ }
-        };
+            try {
+                ws = new WebSocket('ws://127.0.0.1:8765');
+            } catch (e) {
+                connecting = false;
+                scheduleReconnect();
+                return;
+            }
+            ws.onopen = () => {
+                console.log('[KA Bridge-SW] Verbunden mit 127.0.0.1:8765 (JSON-RPC 2.0)');
+                connecting = false;
+            };
+            ws.onmessage = (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); } catch (e) { return; }
+                if (msg.token !== bridgeToken) {
+                    if (msg.id !== undefined) rpcError(msg.id, -32001, 'unauthorized');
+                    return;
+                }
+                rpcHandle(msg);
+            };
+            ws.onclose = () => {
+                connecting = false;
+                scheduleReconnect();
+            };
+            ws.onerror = () => {
+                try { ws.close(); } catch (e) { /* ignore */ }
+            };
+        });
     }
 
     function scheduleReconnect() {
-        setTimeout(connect, 5000);
+        // 15s-Backoff: Port-Probe ist schon leise, trotzdem gemuetlicher
+        // Takt — der SW haelt sich nicht dauerhaft wach.
+        setTimeout(connect, 15000);
     }
 
     // Boot: Token laden, dann verbinden. WebSocket haelt den SW wach (116+).
