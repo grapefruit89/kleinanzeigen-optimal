@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // MCP-Anbindung (ROADMAP P2 Schritt 4): Extension als Tool-Anbieter.
+  // Aktivierung: 1) Extension-Menü → feature_McpBridge AN  2) Token kopieren
+  // 3) export KA_MCP_TOKEN=<token> vor dem opencode-Start.
+  "mcp": {
+    "ka": {
+      "type": "local",
+      "command": ["node", "mcp-adapter/adapter.js"],
+      "environment": {
+        "KA_MCP_TOKEN": "{env:KA_MCP_TOKEN}"
+      },
+      "enabled": true
+    }
+  }
+}

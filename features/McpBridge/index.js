@@ -1,98 +1,58 @@
+// FEATURE: McpBridge (v2.1, 2026-09-09 — Architektur-Fix)
+// INTENT:
+//   Nur noch get_page-Responder im Content-Script: Der WS-Client lebt jetzt
+//   im SERVICE WORKER (core/bridge-sw.js) — SW stirbt sauber bei Reload,
+//   keine Zombie-Kontexte mehr, kaApiQueued liegt direkt dort.
+//   Dieses Modul antwortet auf chrome.tabs.sendMessage({action:'kaGetPage'})
+//   vom SW (get_page-Tool) und sonst NICHTS. Opt-in bleibt feature_McpBridge.
+// BROKEN IF:
+//   "kein Responder": Flag aus ODER Seite nach Aktivierung nicht neu geladen.
+// TOKEN-EFFIZIENZ:
+//   snapshot = url/title/Karten-Kompaktsatz (default); 'html' = Voll-Dump
+//   (teuerster moeglicher Response — bewusst Opt-in, siehe §9).
 KAFeatureManager.register('McpBridge', () => {
     'use strict';
 
-    let ws = null;
-    let isConnecting = false;
-    let reconnectTimer = null;
-    let bridgeToken = '';
+    const RE_PLZ = /^\d{5}\b/;
+    const RE_PREIS = /\d{1,3}(\.\d{3})* €/;
+    const RE_FLAECH = /\d+(?:[.,]\d+)?\s*m²/i;
 
-    function randomToken() {
-        const bytes = new Uint8Array(16);
-        crypto.getRandomValues(bytes);
-        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    async function loadToken() {
-        const settings = await KAStorage.get('ka_settings', {});
-        if (typeof settings.mcp_bridge_token === 'string' && settings.mcp_bridge_token.length >= 16) {
-            bridgeToken = settings.mcp_bridge_token;
-            return;
-        }
-        bridgeToken = randomToken();
-        settings.mcp_bridge_token = bridgeToken;
-        await KAStorage.set('ka_settings', settings);
-        // P0-Härtung (2026-09-09): Token NICHT per console.log ausgeben
-        // (Leak) -- abholbar im InPageMenu-Eintrag via "Token kopieren".
-        console.warn('[KA MCP Bridge] Neues Token erzeugt. Abholbar im KA-Settings-Menue (Token kopieren).');
-    }
-
-    function connect() {
-        if (isConnecting || (ws && ws.readyState === WebSocket.OPEN)) return;
-        isConnecting = true;
-
-        try {
-            ws = new WebSocket('ws://127.0.0.1:8765');
-        } catch (e) {
-            isConnecting = false;
-            scheduleReconnect();
-            return;
-        }
-
-        ws.onopen = () => {
-            console.log('[KA MCP Bridge] Verbunden mit 127.0.0.1:8765');
-            isConnecting = false;
+    function snapshot(maxCards) {
+        const karten = [...document.querySelectorAll('article[data-adid]')].slice(0, maxCards).map((art) => {
+            const out = { id: art.getAttribute('data-adid') };
+            const h = art.querySelector('h2, h3, [class*="title"]');
+            if (h) out.titel = (h.textContent || '').trim().slice(0, 80);
+            const leafs = [...art.querySelectorAll('*')].filter((e) => e.children.length === 0).map((e) => (e.textContent || '').trim()).filter(Boolean);
+            for (const t of leafs) {
+                if (RE_PLZ.test(t)) out.plz = t;
+                else if (RE_FLAECH.test(t)) out.flaeche = t;
+                else if (RE_PREIS.test(t)) out.preis = t;
+                else if (/^TOP$/.test(t)) out.top = true;
+                else if (/Von |Privat|GmbH|AG$/.test(t)) out.seller = t;
+            }
+            return out;
+        });
+        return {
+            url: location.href.slice(0, 200),
+            title: document.title.slice(0, 120),
+            karten_gesamt: document.querySelectorAll('article[data-adid]').length,
+            karten,
+            hinweis: 'format:"html" liefert den Voll-Dump (teuer, bewusst Opt-in).',
         };
+    }
 
-        ws.onmessage = (event) => {
-            let data;
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request && request.action === 'kaGetPage') {
             try {
-                data = JSON.parse(event.data);
+                if (request.format === 'html') {
+                    sendResponse({ ok: true, data: document.documentElement.outerHTML });
+                } else {
+                    sendResponse({ ok: true, data: snapshot(request.maxCards || 10) });
+                }
             } catch (e) {
-                console.error('[KA MCP Bridge] Nachricht nicht parsebar:', e);
-                return;
+                sendResponse({ ok: false, error: String((e && e.message) || e) });
             }
-
-            if (data.token !== bridgeToken) {
-                try {
-                    ws.send(JSON.stringify({
-                        type: 'error',
-                        requestId: data.requestId || null,
-                        error: 'unauthorized'
-                    }));
-                } catch (e) { /* ignore */ }
-                return;
-            }
-
-            if (data.action === 'get_html') {
-                ws.send(JSON.stringify({
-                    type: 'page_data',
-                    requestId: data.requestId,
-                    html: document.documentElement.outerHTML
-                }));
-            }
-        };
-
-        ws.onclose = () => {
-            isConnecting = false;
-            scheduleReconnect();
-        };
-
-        ws.onerror = () => {
-            try { ws.close(); } catch (e) { /* ignore */ }
-        };
-    }
-
-    function scheduleReconnect() {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 5000);
-    }
-
-    // P0-Härtung (2026-09-09): Bei Seiten-Unload Verbindung ordentlich
-    // schliessen + Reconnect-Timer stoppen (keine Zombie-Verbindungen).
-    window.addEventListener('beforeunload', () => {
-        clearTimeout(reconnectTimer);
-        try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+        }
+        // Kein return true — sendResponse ist synchron hier.
     });
-
-    loadToken().then(connect);
 });

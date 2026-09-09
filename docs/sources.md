@@ -106,12 +106,24 @@ Docs. Querverweise: `docs/kleinanzeigen-api.md`, `ROADMAP.md`, `docs/antipattern
 - **Wo:** `docs/kleinanzeigen-api.md` §9 Manifest-Umbau; ROADMAP P0/P1
 
 ### [chrome-devtools-mcp](https://developer.chrome.com/blog/chrome-devtools-mcp) — ChromeDevTools (Blog + [Repo](https://github.com/ChromeDevTools/chrome-devtools-mcp))
-- **Status:** teilweise (Roadmap + Debug-Werkzeug)
+- **Status:** teilweise (Roadmap + Debug-Werkzeug) + **Empfehlung „jetzt einbauen"** (2026-09-09 MCP-Umgebungsrecherche)
 - **Übernahme:** Token-Effizienz-Muster für McpBridge-v2 (take_snapshot-Prinzip,
   Pagination, filePath-Offloading, Filter-Parameter, includeSnapshot=false);
-  `--browserUrl http://127.0.0.1:9222` = CDP-attach gegen Helium als Debug-Weg
+  `--browser-url http://127.0.0.1:9222` = CDP-attach gegen Helium als Debug-Weg
   (Extension-Kategorie-Tools funktionieren im attach-Modus NICHT).
 - **Wo:** `docs/kleinanzeigen-api.md` §9 Token-Effizienz-Roadmap; ROADMAP P2+P4
+
+### [Context7 MCP](https://github.com/upstash/context7-mcp) — upstash *(2026-09-09)*
+- **Status:** Empfehlung „jetzt einbauen" (Opinion der Recherche); noch nicht konfiguriert
+- **Was:** MCP-Server für aktuelle Bibliotheks-Doku (`resolve-library-id` + `query-docs`); Anbindung `npx -y @upstash/context7-mcp` (stdio) oder remote `https://mcp.context7.com/mcp`; ohne Key nutzbar (Rate-Limits), Free-Key optional.
+- **Nutzswert für uns:** aktuelle chrome.*/MV3-Doku on demand (Trainings-Cutoff-Problem).
+- **Wo:** dieses Register; Eintrag in opencode.jsonc pending
+
+### Browser-MCP-Landschaft (2026-09-09 gerechnet)
+- **playwright-mcp** (Microsoft): später — nur bei Cross-Browser-QA-Bedarf; überlappt chrome-devtools-mcp, kontextlastiger
+- **mcp-chrome** (hangwin, Extension + Native Messaging): brauchen wir nicht — redundant zu unserer McpBridge
+- **browser-use**: brauchen wir nicht — eigene LLM-Keys nötig, Agent-Design deckt nichts extra ab
+- **puppeteer-mcp** (Community): brauchen wir nicht — offizielle Variante veraltet
 
 ### [WebMCP](https://developer.chrome.com/docs/ai/webmcp) + [secure-tools](https://developer.chrome.com/docs/ai/webmcp/secure-tools) — developer.chrome.com
 - **Status:** referenz (komplementär, kein Ersatz)

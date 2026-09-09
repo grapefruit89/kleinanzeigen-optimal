@@ -193,8 +193,21 @@ Weiterer Detail-Anker (Quelle: "Kleinanzeigen Plus", ID cgailbbhhcmdglfanagajfjf
 | Monitoring via contentHash/Dedup-Baseline | lowlanddata, clearpath | TODO (Phase 2) |
 | „Frontier-Mode" (Anzeigen-IDs zählen site-weit, kein Cache) | monkrel | TODO (Neu-Anzeigen-Sniffer) |
 | HTTP-only + Datacenter-Proxy + exp. Backoff | memo23, lowlanddata | ✅ Retry/Backoff im Background-Client |
-| Redirect → „Anzeige gelöscht"-Erkennung | DanielWTE (219★) | TODO (Datenqualität) |
+| Redirect → „Anzeige gelöscht"-Erkennung | DanielWTE (219★) | ✅ Live-Verifiziert 2026-09-09: Web-301 → Regional-Suche (`/s-wohnung-mieten/<bundesland>/c203lXXXX`) trotz API-Status ACTIVE. **API-Status ≠ Web-Verfügbarkeit** — der Web-Redirect ist der echte „gelöscht/verkauft"-Indikator. TODO: Extension-Navigation auf 301 prüfen (wasd-Navigation kann daraus ein Badge machen) |
 | robots.txt-Ehrlichkeit (Radius-URLs + viewCount-Endpoint sind ausgeschlossen) | unfenced, lowlanddata | bewusst einhalten |
+
+### Kincident: KA-Detailseiten-Hydration defekt (2026-09-09 live beobachtet)
+
+Alle Detail-URLs (/s-anzeige/…) rendern im Browser die generische Suchliste —
+unabhängig von Extension (deaktiviert getestet), Profil-Cookies (gecleart +
+exakt repliziert) und Helium-Instanz (clean profile Port 9223). Die SSR-Antwort
+ist korrekt (`page_type: "VIP"`, `#viewad-price` im HTML), aber die Astro-
+Islands laden aus dem **falschen Bundle** (`/frontend-web/_search-result-page-web/assets/...`)
+statt dem Detail-Bundle → der Client rendert die Suchliste in die Detail-URL.
+Diagnose: KA-serverseitiger Rollout-/Rebrand-Bug (Titel „eBay Kleinanzeigen ist
+jetzt Kleinanzeigen"). **Konsequenz:** detail.js-Anker (#viewad-price,
+meta[itemprop=price]) sind im SSR korrekt — Live-Verifikation der Detailseite
+erst nach KA-Fix wiederholen (KAAAnchors.diagnose() auf einer Detailseite).
 
 ## 5. Architektur in der Extension (2026-09-09 eingebaut)
 
@@ -333,6 +346,34 @@ Warum dies der naechste grosse Step ist:
   isolated-world-Test) via Inspector-Extension, 3) McpBridge v2 unabhängig bauen.
 
 ### ROADMAP: McpBridge v2 — echter MCP-Server für Agent-Anbindung (2026-09-09, recherchiert)
+
+**STATUS 2026-09-09: GEBAUT UND E2E-VERIFIZIERT.** Schritte 1–4 erledigt:
+
+- **v2.1-Architektur-Fix:** WS-Client lebt im SERVICE WORKER
+  (`core/bridge-sw.js`, via importScripts), nicht mehr im Content-Script —
+  SW stirbt sauber bei Extension-Reload (keine Zombie-Kontexte), `kaApiQueued`
+  liegt direkt daneben, WebSocket hält den SW wach (Chrome 116+). Nur
+  `get_page` fragt den Content-Script-Responder (`features/McpBridge`).
+- **JSON-RPC 2.0** (initialize/tools/list/tools/call) über
+  ws://127.0.0.1:8765, Token-Auth pro Message.
+- **Tool-Set live verifiziert:** `initialize` (serverInfo ka-mcp-bridge
+  2.1.0), `tools/list` (4 Tools mit inputSchema), `ka_search` (echte
+  Live-Ads: Teaser mit id/title/price/location/category/status/url),
+  `ka_get_ad` (Truncation 500 + pictures-Opt-in), `ka_seller_profile`,
+  `get_page` (Snapshot: 27 Karten mit id/titel/plz/flaeche/preis/top/seller).
+- **Adapter:** `mcp-adapter/adapter.js` (WS-Server 8765 + stdio-MCP, ws-dep),
+  opencode-Anbindung via `opencode.jsonc` `mcp.ka` (Token via
+  `KA_MCP_TOKEN`-Env, Quelle: InPageMenu „Token kopieren").
+- **Lessons Learned (Live-Debug):** ① Zombie-Kontexte alter Tabs bedienen die
+  Bridge parallel und gewinnen das Id-Racing im Adapter (Fehler-Antworten) —
+  Alt-Tabs schließen/NUR-Ein-Tab-Disciplin beim Testen. ② initialize/
+  tools/list/get_page scheinen zu funktionieren, obwohl das serving context
+  tot ist (keine chrome.*-Abhängigkeit) — nur API-Tools enthüllen den Zombie.
+  ③ close code 1005 = Tab/Navigation-Kontext-Tod, nicht Adapter-Fehler.
+- Schritte 5 (Härtung) erledigt: Token-Log entfernt, ws.close bei Unload
+  (Content-Responder), Token-Fehler-Erkennung im Adapter.
+- Offen: **WebMCP** (komplementär, siehe oben) — Probe mit
+  `document.modelContext` + Flag in Helium.
 
 Vision (User): die laufende Extension öffnet per Menüeintrag (`feature_McpBridge`) einen
 lokalen Endpunkt, an dem sich Coding-Agents (opencode & Co.) verbinden und Kleinanzeigen

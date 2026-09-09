@@ -1,4 +1,4 @@
-importScripts('Storage.js', 'kaApiNormalize.js');
+importScripts('Storage.js', 'kaApiNormalize.js', 'bridge-sw.js');
 
 // ------------------------------------------------------------------
 // FELSENFEST: Tracker-Blocker (2026-09-09)

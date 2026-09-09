@@ -44,6 +44,7 @@
         "core/FeatureManager.js",
         "core/kaApi.js",
         "core/kaApiNormalize.js",
+        "core/anchors.js",
         "features/RentalAnalyzer/parser.js",
         "features/RentalAnalyzer/stats.js",
         "features/RentalAnalyzer/ui.js",
