@@ -44,6 +44,8 @@
         "features/RentalAnalyzer/parser.js",
         "features/RentalAnalyzer/stats.js",
         "features/RentalAnalyzer/ui.js",
+        "features/RentalAnalyzer/enrich.js",
+        "features/RentalAnalyzer/detail.js",
         "features/RentalAnalyzer/index.js",
         "features/WasdNavigation/index.js",
         "features/UiCleaner/index.js",
@@ -55,7 +57,8 @@
         "features/ProAdManager/index.js",
         "features/DataExport/index.js",
         "features/McpBridge/index.js",
-        "features/BadgeRemover/index.js"
+        "features/BadgeRemover/index.js",
+        "features/AdRecorder/index.js"
       ],
       "css": [
         "features/RentalAnalyzer/style.css",

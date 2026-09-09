@@ -42,10 +42,10 @@ Extension — sie läuft im eingeloggten Browser und braucht kein App-Secret).
 |---|---|---|
 | `GET /api/ads.json` | Suche: `q`, `page` (0-basiert), `size` (**max 41/page**), `_in` (Feldselektor), `pictureRequired`, `includeTopAds`, `buyNowOnly`, Sortierung (`DATE_DESCENDING` …) | ✅ 2026-09-09 |
 | `GET /api/ads/{id}.json` | Detail: Beschreibung, GPS, Seller (Rating/Badges/Telefon), Attribute, Bilder | ✅ 2026-09-09 |
-| `GET /api/ads/seller-other-ads/{adId}.json` | **Weitere aktive Anzeigen desselben Verkäufers** — auch für PRIVATE (nicht nur /pro-Stores). Betrugserkennung: Portfolio-Muster | 🟡 Reader-Doku (App v2026.31.2) |
+| `GET /api/ads/seller-other-ads/{adId}.json` | **Weitere aktive Anzeigen desselben Verkäufers** — auch für PRIVATE (nicht nur /pro-Stores). Betrugserkennung: Portfolio-Muster | ✅ 2026-09-09 |
 | `GET /api/ads/similar/{adId}.json` | Algorithmisch ähnliche Anzeigen | 🟡 App-Schema |
-| `GET /api/users/public/{userId}/profile.json` | **Öffentliches Verkäuferprofil**: Name, Registrierung, Ratings, Badges | 🟡 App-Schema |
-| `GET /api/v2/counters/ads/vip/{adId}` | **View-Counter** einer Anzeige | 🟡 App-Schema |
+| `GET /api/users/public/{userId}/profile.json` | **Öffentliches Verkäuferprofil**: Name, Registrierung, Ratings, Badges — PLUS `counters {historicalAds, onlineAds, followers}` und `replyIndicators {replyRate, replySpeed}` (live: 151 historische vs. 17 online-Anzeigen = Gewerblich-im-Privat-Gewand-Signal!) | ✅ 2026-09-09 |
+| `GET /api/v2/counters/ads/vip/{adId}` | **View-Counter** einer Anzeige → `{"adId": "…", "value": N}`; alternativ Web-XHR `s-vac-inc-get.json?adId=` → `{"numVisits": N}` | ✅ 2026-09-09 |
 | `GET /api/v2/counters/ads/watchlist` | Watchlist-Zähler (Nachfragesignal) | 🟡 App-Schema |
 | `GET /api/ads/metadata/{catId}.json` · `search-metadata/{catId}.json` | Attribut-Schema pro Kategorie (dynamische Filter) | 🟡 App-Schema |
 | `GET /api/categories.json` · `locations.json` · `locations/{id}.json` | Referenzbäume | 🟡 App-Schema |
@@ -160,7 +160,31 @@ Kleinanzeigen bettet Strukturdaten **dreifach** in jede Anzeige ein
 Schaden-Flags, Duplikate, TÜV-Grenzfälle — die Signale liegen in
 `signals.py` des Repos.)
 
-## 4. Was die Profi-Scraper anders machen (abschauenswerte Techniken)
+## 3c. Detailseiten: BelenConf (neue Embedded-Schicht, 2026-09-09 live verifiziert)
+
+`window.BelenConf.universalAnalyticsOpts.dimensions` trägt auf Detailseiten (VIP)
+strukturierte Anzeigen-Daten — Preis/Fläche/IDs direkt aus der Tracking-Config:
+
+| Feld | Inhalt | Live-Wert (Beispiel) |
+|---|---|---|
+| `ad_id` | Anzeigen-ID | `3481022874` |
+| `ad_price` | **Preis als Float** | `1150.00` |
+| `dimension108` | **Wohnfläche** (`qm_d:`-Regex) | `143.00` |
+| `l1/l2_category_id`, `selected_category_name` | Kategoriebaum | `203 / Wohnung_mieten` |
+| `l1/l2/l4_location_id`, `selected_location_name` | Ortsbaum | `77749` |
+| `user_account_type`, `logged_in`, `user_id` | Session-Kontext | `private / true` |
+
+Robustheits-Kaskade für Preis/Fläche auf Detailseiten (Quelle: Extension
+"Kleinanzeigen für Immos", ID bojipegcomhjkmbhebabhdofgilpcjcd):
+1. `BelenConf`-dims (`ad_price`, `qm_d:`) — Strukturdaten, redesign-sicher
+2. `meta[itemprop="price"]` / `#viewad-price` / `#viewad-details .addetailslist--detail`
+   (Label "Wohnfläche" → `.addetailslist--detail--value`)
+3. Body-Regex `(\d+) m²` — Notanker
+
+Weiterer Detail-Anker (Quelle: "Kleinanzeigen Plus", ID cgailbbhhcmdglfanagajfjffdmbcfoi):
+`#viewad-locality` (PLZ+Ort) + `#street-address` (Straße — Straßen-Daten liegen im DOM!).
+
+
 
 | Technik | Wer | Übernahme |
 |---|---|---|
@@ -201,10 +225,18 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
 
 ## 7. Phase 2 (offen)
 
-- **Messaging-API** (send/inbox/conversation): braucht eingeloggte Session
-  (2FA-Flow) — unser Session-Moat: Endpunkte via DevTools-Netzwerk-Tab
-  reverse-engineeren, solange der User in der App eingeloggt ist. Apify
-  nimmt dafür $0,49/Nachricht. Eleganter Pfad: `gateway.kleinanzeigen.de/auth/{login,refresh}`
+- **Messaging-API (send/inbox/conversation):** monkrel/kleinanzeigen-api (MIT)
+  hat die Chat-Endpunkte bereits implementiert und zeigt die Surface:
+  `login` (User-Bearer via App-Credentials + eigene Credentials), `chats`,
+  `messages <conversationId>`, `reply <conversationId> "…"`. Für die
+  Extension ist der elegantere Pfad der Session-Moat: User-Bearer via
+  `gateway.kleinanzeigen.de/auth/{login,refresh}` aus Cookie+CSRF minten
+  (Technik der *Kleinanzeigen-Enhanced*-Extension) — dann laufen Chats
+  über die gleiche X-ECG-Authorization-User-Schicht. Reddit-Thread
+  (r/informatik 1nnmpuv, Sep 2025) bestätigt die Nachfrage: automatisiertes
+  Anschreiben beim Wohnungssuchen ist ein Standard-Wunsch — und bestätigt
+  die Gegenmaßnahmen-Risiken (Rate-Limits, Heuristiken gegen Automatisierung).
+  Apify nimmt dafür $0,49/Nachricht. Eleganter Pfad: `gateway.kleinanzeigen.de/auth/{login,refresh}`
   minted den User-Bearer aus Cookie+CSRF (Technik der *Kleinanzeigen-Enhanced*-Extension).
 - **Seller-Portfolio-Analyse:** `api/ads/seller-other-ads/{adId}.json` (public!)
   — Betrugsmuster: Händler tarnt sich als Privat, Anzeigenstapel,
@@ -218,13 +250,53 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
   Such-Median markieren — RentalAnalyzer rechnet bereits Median/IQR
   (`kaStats`); die Schwelle als Badge („unter Median −20 %") ist ein
   Ein-Zeilen-Add im UI-Layer.
+- **Query-Splitting über den 1.250er-Cap** (lowlanddata/unfenced-Muster):
+  breite Suchen nach Kategorie/PLZ/Preisband splitten und über Shards
+  deduplizieren — sonst wird hinter Seite 50 stillschweigend verloren.
+- **Datums-Fenster (`daysOld`/postedAfter/Before):** nur Anzeigen der
+  letzten N Tage in Export/Aufnahme (client-side Filter auf
+  `startDateTime` — die API liefert die Zeit zuverlässig mit).
 - **Verkäufer-Inventar:** `userInventorySearch`-Flag existiert in
   `searchOptions` → es gibt einen Endpunkt für das Inventar eines Verkäufers
   (noch zu verifizieren).
 - **Monitoring-Mode:** Baseline-Dedup + contentHash; kleinanzeigen-agent.de
   zeigt die Nachfrage nach Webhooks bei neuen Inseraten.
+- **MCP-Tool-Parität erreicht (2026-09-09):** Alle 10 Tools des bezahlten
+  kleinanzeigen-agent-MCP-Servers (kleinanzeigen-agent.de/mcp) sind in der
+  Extension abgedeckt — search (KAApi.search), get_ad/status+views (getAd/
+  status-Feld/views), seller_profile (sellerProfile), seller_ads (sellerAds),
+  categories, category_metadata, category_search_metadata, locations,
+  location (Referenz-Endpunkte). Kosten unserer Seite: 0 Credits, nur
+  Rate-Discipline; deren Seite: 1–2 Credits/Call. Die 5 Referenz-Endpunkte
+  (categories, metadata, search-metadata, top-locations, locations/{id})
+  wurden live gegen die CAPI verifiziert (alle HTTP 200).
+- **KI-Bridge — kein externer Server nötig (2026-09-09 recherchiert):**
+  Chrome DevTools MCP (offiziell, stabil seit Chrome 149) + **WebMCP**
+  (proposed standard, Chromium 149+ Origin Trial, Flag `#enable-webmcp-testing`)
+  lösen das "Extension als Tool-Anbieter für Agenten"-Problem auf Standard-
+  Weg: Die Extension kann WebMCP-Tool-Registrierungen in die KA-Seite
+  injizieren (`navigator.modelContext`, origin-isolated, Permissions-Policy
+  `tools`) — Agenten rufen dann `ka_get_ad`/`ka_seller_profile`/… nativ über
+  die Browser-Session auf, die Extension bridged zur CAPI. Helium (Chromium
+  151): WebMCP-API aktuell nicht aktiv (Probe: `navigator.modelContext`
+  undefined) — Aktivierung über Flag oder Origin-Trial. Bis dahin gilt:
+  CDP-direkter Zugriff auf den Extension-Service-Worker funktioniert bereits
+  (Debug-Port 9222).
 
 ## 8. Quellen
+
+### Analyse-Fundus: installierte Kleinanzeigen-Extensions (Helium, 2026-09-09)
+
+| Extension (ID) | Was sie macht | Abschauenswert |
+|---|---|---|
+| **Buddy** (egliabllpeghjkodnoedlkcpnmanhgbb, 1.2.5) | Seller-Rating/Alter an Karten, Notizen, Ausblenden; Detail-Fetch per `fetch()` + DOMParser | ⭐ **KbAnchors.js-Architektur**: Anker mit 3 Strategien (selektor/struktur/**inhalt**) + `KbAnchors.diagnose()` — Text-basierte Anker („fünfstellige PLZ bleibt PLZ") + Diagnose-Routine, gleiche Methodik wie unsere Header-Doku; `icon-rating-tag-N`-Klasse = Seller-Stufe; "Aktiv seit TT.MM.JJJJ"-Regex; ld+json als Karten-Titel-Quelle; eigenes Cache-Modul |
+| **für Immos** (bojipegcomhjkmbhebabhdofgilpcjcd, 1.0.0) | €/m² auf Detailseiten | ⭐ **BelenConf-Technik** (§3c): `qm_d:` aus `dimension108`, `meta[itemprop=price]`, `#viewad-details`-Zeilen — direkt für RentalAnalyzer P0 übernommen |
+| **Boost** (gaemgmihcgebiagleakccomamninhmdd, 1.0.1) | Hover-Preview + Zoom + Maps | Dual-Selektoren für Detail-Anker (`#viewad-*` + `.boxedarticle--*`-Fallbacks), Datums-Anker `#viewad-extra-info .icon-calendar-gray-simple + span`, Preview-UX (hover→fetch→DOMParser→popup) |
+| **Plus** (cgailbbhhcmdglfanagajfjffdmbcfoi, 1.0.2) | Karte + Datum-Toggle | `#street-address`-Anker (Straße im DOM), Maps-Embed aus PLZ+Straße |
+| **Bild-Viewer** (cbpmpfinkejojdnhndpgofocindnmejn, 2.0) | Zip-Download aller Bilder | Trivial (background.js Stub) — unsere API `pictures[]` ist besser |
+| **Filter** (bekmapfnlkhaeopdmhglkanoobnglbhf, 1.0.6) | r-unruh/kleinanzeigen-filter | siehe Quellen oben (TOP-SVG-Glyph etc.) |
+
+### Code-/Doku-Quellen
 
 - Eigene Live-Verifikation 2026-09-09 (`curl`, Basic Auth, ohne Login):
   `/ads.json` (Suchschema) und `/ads/{id}.json` (GPS, Seller-Rating, Badges)
@@ -239,7 +311,19 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
   MCP-Server + Claude-Skill; HTML-only-Scraper ohne Credentials als shipped path
 - github.com/monkrel/kleinanzeigen-api (MIT, Python) — Mobile-API-Client,
   `iter_new_ads`/Frontier-Mode (ID-Zählung, Neu-Anzeigen in Sekunden),
-  Refresh-Latenz 15–45 s
+  Refresh-Latenz 15–45 s; **inzwischen mit Auth-Endpunkten**: login, chats,
+  messages, reply, my-ads, watchlist, pause/activate/delete/extend —
+  die Messaging-Phase-2-Surface ist damit offengelegt
+- github.com/Second-Hand-Friends/kleinanzeigen-bot (AGPL, 423★, 1.083
+  Commits, aktiv) — KLEINEIGENE-Anzeigen-Lifecycle über Browser-Automation
+  (nodriver statt Selenium): publish/update/delete/**republish nach Interval**/
+  extend (8-Tage-Fenster, hält Watchlist + Monatskontingent)/**reserve+activate**
+  (Anzeige aus Suche nehmen, ID/Alter/Views/Watchlist bleiben!)/**content_hash**
+  (Change-Detection vor Republish — exakt unser Monitoring-Dedup-Muster),
+  Shipping-Options-Inference aus öffentlichem Zustand, workspace-portable/
+  XDG-Modes. Eigenes-Konto-Automation ist der legitime Pfad (ToS-Disclaimer
+  inklusive). "Related projects"-Liste ist ein kleines Ökosystem-Verzeichnis
+  (Discord/Telegram-Watcher, SQL-Scraper, Feinanzeigen-Extension, Kleingäck-Backup)
 - github.com/DanielWTE/ebay-kleinanzeigen-api (MIT, 219★) — Playwright-Fall-
   back-Muster, Redirect=gelöscht-Erkennung, Seller-Extraktion, eigene FastAPI-
   Schnittstelle über der Seite

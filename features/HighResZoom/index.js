@@ -13,7 +13,6 @@ KAFeatureManager.register('HighResZoom', () => {
     document.body.appendChild(overlay);
 
     let hoverTimer = null;
-    let currentAbortController = null;
 
     // Kleinanzeigen liefert Bilder ueber img.kleinanzeigen.de/api/v1/prod-ads/images/..
     // ?rule=$_XX.AUTO aus, wobei XX eine von einem festen Satz vordefinierter
@@ -129,7 +128,6 @@ KAFeatureManager.register('HighResZoom', () => {
         // Clear previous state
         overlay.innerHTML = '';
         overlay.classList.remove('active');
-        if (currentAbortController) currentAbortController.abort();
         clearTimeout(hoverTimer);
         hoverToken++; // jeder Hover-Wechsel entwertet noch wartende Detail-Fetches sofort
 
@@ -142,63 +140,82 @@ KAFeatureManager.register('HighResZoom', () => {
     function handleLeave() {
         clearTimeout(hoverTimer);
         overlay.classList.remove('active');
-        if (currentAbortController) currentAbortController.abort();
         hoverToken++; // laufende/wartende Gallery-Fetches fuer diese Karte werden ab hier ignoriert
     }
 
-    // 29.08.2026 live gefunden: schnelles Hovern ueber mehrere Karten hintereinander
-    // hat Kleinanzeigen selbst mit HTTP 503 auf JEDEN einzelnen Detailseiten-Fetch
-    // reagiert (Bild-CDN-Requests liefen parallel weiter mit 200) -- klassisches
-    // Bot-Rate-Limiting (Akamai, siehe AutoShowMore-Kommentar), kein Fehler im
-    // fetch()-Aufruf selbst. Gegenmassnahme:
-    //   1. galleryCache: pro Anzeige nur einmal pro Seiten-Session nachladen.
-    //   2. hoverToken: jeder neue Hover/Leave entwertet vorherige Anfragen sofort --
-    //      eine Karte, die der Nutzer schon wieder verlassen hat, wird NICHT mehr
-    //      gefetcht, auch wenn sie noch in der Warteschlange stand.
-    //   3. fetchChain: serialisiert alle Detail-Fetches mit Mindestabstand
-    //      (MIN_FETCH_GAP_MS), statt dass mehrere Hovers gleichzeitig lospreschen.
-    const galleryCache = new Map(); // detailLink -> Array<string> (Bild-URLs)
+    // 29.08.2026: Detailseiten-Fetch pro Hover (503-Anfaellig bei schnellem
+    // Hovern, ~200 KB HTML pro Karte) ist RAUS. Seit 2026-09-09 liefert die
+    // Mobile-API (KAApi.getAd) mit EINEM Call: alle Bild-URLs (pictures[]),
+    // Titel, Preis + Typ, Ort, Seller-Daten, Einstelldatum -- und der
+    // Background-Client bremst/pausiert korrekt. In-Memory-Cache pro Session,
+    // damit wiederholtes Hovern = 0 Calls (RentalEnrich's ka_enrich_cache
+    // bleibt unberuehrt, dieser Cache ist HighRes-lokal, ohne Bilder dupliziert).
+    const previewCache = new Map(); // adId -> {pictures, title, price, seller, location, startDateTime}
     let hoverToken = 0;
-    let fetchChain = Promise.resolve();
-    let lastFetchAt = 0;
-    const MIN_FETCH_GAP_MS = 450;
 
-    function renderCachedGallery(srcs) {
-        for (const src of srcs) {
-            const newImg = document.createElement('img');
-            newImg.src = src;
-            overlay.appendChild(newImg);
-        }
+    function adIdFromLink(link) {
+        // Buddy-Pattern: /s-anzeige/<slug>/<id>-<cat>-<loc>
+        const m = String(link || '').match(/\/(\d{6,})-\d+-\d+/);
+        return m ? m[1] : null;
     }
 
-    async function fetchGalleryImages(detailLink, mainImgSrc, signal) {
-        const response = await fetch(detailLink, { signal });
-        const html = await response.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+    function fmtDate(iso) {
+        const t = Date.parse(String(iso || '').replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+        return isNaN(t) ? null : new Date(t).toLocaleDateString('de-DE');
+    }
 
-        const detailImages = Array.from(doc.querySelectorAll('.galleryimage-element img'));
-
-        // Insgesamt max. 3 Bilder im Overlay (1 Hauptbild + 2 weitere) --
-        // vorher 4, ab 4 wird's eine Kontaktfolie statt brauchbarer Vorschau.
-        let added = 0;
-        const seenUrls = new Set([mainImgSrc]); // don't add main image again
-        const collected = [];
-
-        for (const dImg of detailImages) {
-            if (added >= 2) break;
-
-            let src = dImg.getAttribute("src");
-            if (!src || !src.includes('prod-ads/images')) continue;
-
-            src = src.replace(/rule=\$_\d+\.AUTO/, CACHE_RULES.max);
-
-            if (!seenUrls.has(src)) {
-                seenUrls.add(src);
-                added++;
-                collected.push(src);
-            }
+    // Statistik-Schiene rechts am Bild (API-Daten). Zentriert mit dem Overlay
+    // (CSS: flex-row, alles in der Mitte), kompakt lesbar.
+    function renderStats(ad) {
+        const panel = document.createElement('div');
+        panel.id = 'ka-preview-stats';
+        const rows = [];
+        if (ad.title) rows.push(`<div class="ka-ps-title">${ad.title}</div>`);
+        if (ad.price) {
+            const p = [];
+            if (ad.price.amount != null) p.push(ad.price.amount.toLocaleString('de-DE') + ' €');
+            if (ad.price.type) p.push(ad.price.type);
+            if (ad.price.originalAmount != null) p.push(`<s style="opacity:.6">${ad.price.originalAmount.toLocaleString('de-DE')} €</s>`);
+            if (p.length) rows.push(`<div class="ka-ps-price">${p.join(' · ')}</div>`);
         }
-        return collected;
+        if (ad.location) rows.push(`<div class="ka-ps-row">📍 ${ad.location.name || ''}</div>`);
+        if (ad.startDateTime) rows.push(`<div class="ka-ps-row">🗓 online seit ${fmtDate(ad.startDateTime)}</div>`);
+        if (ad.category) rows.push(`<div class="ka-ps-row">🏷 ${ad.category.name || ''}</div>`);
+        if (ad.seller) {
+            const s = ad.seller;
+            rows.push(`<div class="ka-ps-row">👤 ${s.accountType || '?'}${s.rating != null ? ` · ★${Number(s.rating).toFixed(1)}` : ''}</div>`);
+            if (s.since) rows.push(`<div class="ka-ps-row">🕒 Konto seit ${fmtDate(s.since)}</div>`);
+        }
+        panel.innerHTML = rows.join('');
+        overlay.appendChild(panel);
+    }
+
+    async function fetchPreviewData(adId) {
+        if (previewCache.has(adId)) return previewCache.get(adId);
+        const resp = await KAApi.getAd(adId);
+        if (resp.ok && resp.ad) {
+            const ad = resp.ad;
+            previewCache.set(adId, ad);
+            return ad;
+        }
+        return null;
+    }
+
+    function renderExtraPictures(ad, mainImgSrc) {
+        // pictures[] = alle Gallery-Bilder; wir nehmen #2/#3 in $_45-Qualitaet
+        // (siehe CACHE_RULES-Kommentar oben: 800px-Breite bis 1.5x DPI scharf).
+        const seen = new Set([mainImgSrc]);
+        let added = 0;
+        for (const url of (ad.pictures || [])) {
+            if (added >= 2) break;
+            const src = url.replace(/(\$\_\d+)?(\.JPG|\.AUTO)/, '$_45.JPG');
+            if (!src || seen.has(src)) continue;
+            seen.add(src);
+            added++;
+            const img = document.createElement('img');
+            img.src = src;
+            overlay.appendChild(img);
+        }
     }
 
     async function showGallery(detailLink, mainImgSrc) {
@@ -215,43 +232,20 @@ KAFeatureManager.register('HighResZoom', () => {
         const sharpSrc = mainImgSrc.replace(/rule=\$_\d+\.AUTO/, 'rule=$_57.AUTO');
         if (sharpSrc !== mainImgSrc) {
             const sharpPreload = new Image();
-            sharpPreload.onload = () => { mainImg.src = sharpSrc; };
+            sharpPreload.onload = () => { if (myToken === hoverToken) mainImg.src = sharpSrc; };
             sharpPreload.src = sharpSrc;
         }
 
-        // 2. Fetch ad detail page to find remaining images
-        if (!detailLink) return;
+        const adId = adIdFromLink(detailLink);
+        if (!adId || typeof KAApi === 'undefined') return;
+        if (myToken !== hoverToken) return; // Nutzer schon weiter
 
-        if (galleryCache.has(detailLink)) {
-            if (myToken !== hoverToken) return; // Nutzer ist laengst weiter
-            renderCachedGallery(galleryCache.get(detailLink));
-            return;
-        }
+        const ad = await fetchPreviewData(adId);
+        if (!ad || myToken !== hoverToken) return; // abgewischt oder API-Fehler
 
-        currentAbortController = new AbortController();
-        const myAbort = currentAbortController;
-
-        // In die serialisierte Kette einreihen statt sofort loszufeuern.
-        fetchChain = fetchChain.then(async () => {
-            if (myToken !== hoverToken || myAbort.signal.aborted) return; // schon verlassen -- gar nicht erst fetchen
-
-            const gap = MIN_FETCH_GAP_MS - (Date.now() - lastFetchAt);
-            if (gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
-            lastFetchAt = Date.now();
-
-            if (myToken !== hoverToken || myAbort.signal.aborted) return; // erneut pruefen nach der Wartezeit
-
-            try {
-                const collected = await fetchGalleryImages(detailLink, mainImgSrc, myAbort.signal);
-                galleryCache.set(detailLink, collected);
-                if (myToken !== hoverToken) return; // Antwort kam an, Nutzer ist aber schon weiter
-                renderCachedGallery(collected);
-            } catch (err) {
-                if (err.name !== 'AbortError') {
-                    console.error('[KA] Error fetching ad gallery:', err);
-                }
-            }
-        });
+        // 2. Zusatzbilder + Stats aus EINEM API-Call (aus Cache, falls bekannt)
+        renderExtraPictures(ad, mainImgSrc);
+        renderStats(ad);
     }
 
     // Run initially and observe mutations

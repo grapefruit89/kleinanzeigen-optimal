@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
         feature_WidescreenLayout: document.getElementById('feature_WidescreenLayout'),
         feature_AutoShowMore: document.getElementById('feature_AutoShowMore'),
         feature_CleanHomepage: document.getElementById('feature_CleanHomepage'),
-        feature_DataExport: document.getElementById('feature_DataExport')
+        feature_DataExport: document.getElementById('feature_DataExport'),
+        feature_AdRecorder: document.getElementById('feature_AdRecorder')
     };
 
     chrome.storage.local.get(['ka_settings'], (result) => {

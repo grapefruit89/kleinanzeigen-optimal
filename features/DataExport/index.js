@@ -339,6 +339,11 @@ KAFeatureManager.register('DataExport', async () => {
                         if (api.startDateTime) ad.eingestellt_am_api = api.startDateTime;
                         if (api.price) ad.price_type_norm = api.price.type;
                         if (api.price && api.price.amount != null) ad.preis_api = { betrag: api.price.amount, waehrung: api.price.currency, raw_typ: api.price.rawType };
+                        // Preisreduktion (Feature 7): original-amount aus der API --
+                        // null wenn absent, Feldname im JAXB noch nicht live-geprüft
+                        if (api.price && api.price.originalAmount != null) {
+                            ad.original_preis = api.price.originalAmount;
+                        }
                         if (api.location) ad.gps = { lat: api.location.lat, lng: api.location.lng, radius_km: api.location.radiusKm };
                         if (api.address) ad.adresse = api.address;
                         if (api.seller) ad.verkaeufer = {

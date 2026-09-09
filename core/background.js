@@ -66,13 +66,30 @@ async function kaApiRaw(path, params) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
     }
 
-    const res = await fetch(url.toString(), {
-        headers: {
-            'Authorization': KA_API_BASIC_AUTH,
-            'User-Agent': KA_API_UA,
-            'Accept': 'application/json',
-        },
-    });
+    // HANG-SCHUTZ (2026-09-09, Live-Debug): fetch ohne Timeout kann bei
+    // Verbindungsproblemen ewig haengen und die SERIELLE QUEUE fuer alle
+    // nachfolgenden Calls blockieren (beobachtet: Message-Timeout, keine
+    // Response mehr). Abort nach 15s -> transient-fehler mit Retry.
+    const aborter = new AbortController();
+    const abortTimer = setTimeout(() => aborter.abort(), 15000);
+
+    let res;
+    try {
+        res = await fetch(url.toString(), {
+            headers: {
+                'Authorization': KA_API_BASIC_AUTH,
+                'User-Agent': KA_API_UA,
+                'Accept': 'application/json',
+            },
+            signal: aborter.signal,
+        });
+    } catch (e) {
+        clearTimeout(abortTimer);
+        const err = new Error('KA-API Netzwerkfehler/Timeout (15s Abort): ' + e.message);
+        err.transient = true;
+        throw err;
+    }
+    clearTimeout(abortTimer);
     kaApiState.lastRequestAt = Date.now();
     kaApiState.windowCount++;
 
@@ -142,6 +159,63 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'kaApiSearch') {
         kaApiQueued('/ads.json', request.params || {})
             .then(raw => sendResponse({ ok: true, ads: normalizeSearchResponse(raw) }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiSellerProfile') {
+        // users/public ist camelCase ohne JAXB-Envelope -> raw direkt
+        kaApiQueued(`/users/public/${request.userId}/profile.json`, {})
+            .then(raw => sendResponse({ ok: true, profile: normalizeSellerProfile(raw) }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiSellerAds') {
+        // Weitere aktive Anzeigen des Verkaeufers derselben JAXB-Envelope-Form
+        // wie die Suche -> normalizeSearchResponse() passt.
+        kaApiQueued(`/ads/seller-other-ads/${request.adId}.json`, {})
+            .then(raw => sendResponse({ ok: true, ads: normalizeSearchResponse(raw) }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiViews') {
+        kaApiQueued(`/v2/counters/ads/vip/${request.adId}`, {})
+            .then(raw => sendResponse({ ok: true, views: normalizeViewCount(raw) }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    // --- Referenz-Endpunkte (kleinanzeigen-agent-MCP-Tool-Nachbau, 2026-09-09)
+    // Baum/Schema-Antworten werden roh durchgereicht (kein JAXB-Envelope).
+    if (request.action === 'kaApiCategories') {
+        kaApiQueued('/categories.json', {})
+            .then(raw => sendResponse({ ok: true, data: raw }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiCategoryMeta') {
+        kaApiQueued(`/ads/metadata/${request.categoryId}.json`, {})
+            .then(raw => sendResponse({ ok: true, data: raw }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiCategorySearchMeta') {
+        kaApiQueued(`/ads/search-metadata/${request.categoryId}.json`, {})
+            .then(raw => sendResponse({ ok: true, data: raw }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiLocationSearch') {
+        // top-locations mit q-Filter oder depth=0 fuer die Topstaedte
+        kaApiQueued('/locations/top-locations.json', {
+            depth: request.depth != null ? request.depth : 0,
+            q: request.q,
+        })
+            .then(raw => sendResponse({ ok: true, data: raw }))
+            .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
+        return true;
+    }
+    if (request.action === 'kaApiLocation') {
+        kaApiQueued(`/locations/${request.locationId}.json`, {})
+            .then(raw => sendResponse({ ok: true, data: raw }))
             .catch(e => sendResponse({ ok: false, error: e.message, fatal: !!e.fatal }));
         return true;
     }

@@ -45,3 +45,22 @@
 .ka-ad-focused { outline: 4px solid #2342b2 !important; outline-offset: -4px; }
 .ka-sqm-badge { background: #2342b2; color: white; padding: 1px 4px; border-radius: 3px; font-size: 0.75em; font-weight: bold; margin-left: 5px; }
 
+
+/* Deal-Score-Chip (2026-09-09): >20% unter Median */
+.ka-sqm-badge .ka-deal-chip {
+    background: #1d8a3f; color: white; padding: 0 4px; border-radius: 3px;
+    font-size: 0.85em; margin-left: 5px; font-weight: bold;
+}
+/* On-Demand-Enrichment-Zeile (GPS/Seller/Views/Betrugs-Flags) */
+.ka-sqm-badge .ka-enrich-line {
+    display: block; font-size: 0.8em; font-weight: normal; margin-top: 2px;
+    color: #e8e8ff; max-width: 320px; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Float-Fallback (2026-09-09): Badge direkt an der Karte, Tailwind-Karten
+   haben keine .aditem-main--middle-Anker mehr -- Karte positionieren + Badge
+   rechts oben absolut. */
+article[data-adid] { position: relative; }
+.ka-sqm-badge.ka-sqm-badge-float {
+    position: absolute; top: 6px; right: 8px; z-index: 3;
+}

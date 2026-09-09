@@ -15,6 +15,7 @@
         // feature_ProAdManager: FELSENFEST (2026-09-09) -- Filler-Slots und
         // TOP/PRO-Anzeigen werden immer ausgeblendet, kein Toggle mehr.
         { id: 'feature_DataExport', name: 'Datenexport (Auto-Scraper)', desc: 'Vollautomatischer Such-Scraper fuer LLM-Daten (JSONL).' },
+        { id: 'feature_AdRecorder', name: 'Such-Aufnahme (REC)', desc: 'REC druecken, durch die Seiten blaettern, alle Anzeigen werden per API (ohne Bilder) gesammelt.' },
         { id: 'feature_McpBridge', name: 'MCP Bridge (DevTools)', desc: 'Lokaler WS 127.0.0.1:8765, nur mit Token. Dev-only.' }
     ];
 

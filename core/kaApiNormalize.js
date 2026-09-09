@@ -37,11 +37,26 @@ function unwrapValue(x) {
 //   Betrag fest           -> FIXED           ("200 €")
 //   Betrag fehlt          -> SEE_DESCRIPTION
 function normalizePriceType(priceObj) {
-    if (!priceObj) return { amount: null, currency: 'EUR', rawType: null, type: 'SEE_DESCRIPTION', negotiable: false };
+    if (!priceObj) return { amount: null, currency: 'EUR', rawType: null, type: 'SEE_DESCRIPTION', negotiable: false, originalAmount: null };
     const raw = (priceObj && priceObj['price-type']) || null;
     const amount = priceObj && priceObj.amount != null && typeof priceObj.amount === 'object'
         ? (priceObj.amount.amount != null ? Number(priceObj.amount.amount) : (priceObj.amount.value != null ? Number(priceObj.amount.value) : null))
         : (priceObj.amount != null ? Number(priceObj.amount) : null);
+    // Preisreduktion (kleinanzeigen-reader App-Modell: originalPrice) -- live
+    // NOCH UNVERIFIZIERT (Sample hatte keine rabattierte Anzeige): moegliche
+    // JAXB-Keys 'original-amount'/'original-price'. Bewusst tolerant:
+    // null wenn absent, nie falsch erfinden.
+    const origRaw = priceObj['original-amount'] != null ? priceObj['original-amount']
+        : (priceObj['original-price'] != null ? priceObj['original-price'] : null);
+    let originalAmount = null;
+    if (origRaw != null) {
+        if (typeof origRaw === 'object') {
+            originalAmount = origRaw.amount != null ? Number(origRaw.amount) : (origRaw.value != null ? Number(origRaw.value) : null);
+        } else if (typeof origRaw === 'number' || typeof origRaw === 'string') {
+            originalAmount = Number(origRaw);
+        }
+        if (originalAmount != null && isNaN(originalAmount)) originalAmount = null;
+    }
     const negotiable = !!(priceObj && (priceObj['negotiation-enabled'] === true || priceObj['negotiation-enabled'] === 'true'));
     const currency = (priceObj && priceObj['currency-iso-code'] && (priceObj['currency-iso-code']['currency-iso-code'] || priceObj['currency-iso-code'].value)) || 'EUR';
 
@@ -52,7 +67,7 @@ function normalizePriceType(priceObj) {
     else if (amount != null) norm = 'FIXED';
     else norm = 'SEE_DESCRIPTION';
 
-    return { amount, currency, rawType: raw, type: norm, negotiable };
+    return { amount, currency, rawType: raw, type: norm, negotiable, originalAmount };
 }
 
 function normalizeLocation(locations) {
@@ -131,6 +146,10 @@ function normalizeAd(rawAd) {
         title: ad.title || null,
         description: ad.description || null,
         isWanted: (ad['ad-type'] || '').toUpperCase() === 'WANTED',   // Gesuch statt Angebot
+        // Status-Lifecycle (kleinanzeigen-bot-Knowledge): ACTIVE/PAUSED/
+        // RESERVED/EXPIRED/DELETED/BLOCKED -- RESERVED = reserviert fuer
+        // Kaeufer, aber ID/Alter/Views/Watchlist bleiben erhalten
+        status: (ad['ad-status'] || ad.status || null),
         price: normalizePriceType(unwrapValue(ad.price)),
         address: ad['ad-address'] ? {
             state: ad['ad-address'].state || null,
@@ -178,6 +197,88 @@ function normalizeAdResponse(data) {
     return normalizeAd(jaxbPayload(envelope));
 }
 
+// Verkäuferprofil (users/public/{userId}/profile.json) — NOT camelCase
+// (kein JAXB-Envelope!), aber in sich gewickelte Objekte. Live 2026-09-09
+// verifiziert: counters {historicalAds, onlineAds, followers} +
+// replyIndicators {replyRate, replySpeed} = Betrugs-/Verhandlungssignale:
+// historisch 151 vs. online 17 Anzeigen = Gewerblich-im-Privat-Gewand.
+// Betrugs-/Anomalie-Signatur: "Gewerbe im Privat-Gewand" (2026-09-09, nach
+// Kritik entschaefft). 67 historische Anzeigen bei 10 Jahren Account sind
+// NORMAL (7/Jahr). Was Gewerbe wirklich zeigt, ist die RATE und der
+// gleichzeitige Bestand, nicht die Absolutzahl:
+//   - >= 20 Anzeigen/Jahr historisch (Private schaffen selten >15/Jahr)
+//   - >= 10 Anzeigen gleichzeitig online (Privat: meist 1-3)
+//   - ohne seit-Datum: >= 50 historisch als grober Fallback
+// Liefert {suspicious, historical, online, perYear, reason} oder null.
+function computeCommercialSuspicion(accountType, counters, since) {
+    if (!counters || (accountType || '').toUpperCase() !== 'PRIVATE') return null;
+    const hist = counters.historicalAds || 0;
+    const online = counters.onlineAds || 0;
+    if (hist === 0 && online === 0) return null;
+
+    let perYear = null;
+    if (since) {
+        // KA-Zeitstempel: "2016-08-12T13:07:42.000+0200" (TZ ohne Doppelpunkt
+        // zerreisst Date.parse) -> "+0200" zu "+02:00" normalisieren
+        const norm = String(since).replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+        const t = Date.parse(norm);
+        if (!isNaN(t)) {
+            const years = Math.max(0.25, (Date.now() - t) / 31557600000);
+            perYear = hist / years;
+        }
+    }
+
+    const reasons = [];
+    if (perYear != null && perYear >= 20) reasons.push(Math.round(perYear) + ' Anzeigen/Jahr');
+    else if (perYear == null && hist >= 50) reasons.push(hist + ' historische Anzeigen');
+    if (online >= 10) reasons.push(online + ' gleichzeitig online');
+    if (!reasons.length) return null;
+
+    return {
+        suspicious: true,
+        historical: hist,
+        online: online,
+        perYear: perYear != null ? Math.round(perYear) : null,
+        reason: 'Privat-Anomalie: ' + reasons.join(', '),
+    };
+}
+
+// Verkäuferprofil (users/public/{userId}/profile.json) — NOT camelCase
+// (kein JAXB-Envelope!), aber in sich gewickelte Objekte. Live 2026-09-09
+// verifiziert: counters {historicalAds, onlineAds, followers} +
+// replyIndicators {replyRate, replySpeed} = Betrugs-/Verhandlungssignale:
+// historisch 151 vs. online 17 Anzeigen = Gewerblich-im-Privat-Gewand.
+function normalizeSellerProfile(raw) {
+    if (!raw || !raw.id) return null;
+    const badges = (raw.userBadges && raw.userBadges.badges) || [];
+    const badgeVal = (name) => {
+        const b = badges.find(x => x.name === name);
+        return b ? (b.value || null) : null;
+    };
+    return {
+        id: String(raw.id),
+        name: raw.contactName || null,
+        initials: raw.initials || null,
+        posterType: raw.posterType || null,       // PRIVATE / COMMERCIAL
+        since: raw.userSince || null,
+        badges,
+        counters: {
+            historicalAds: (raw.counters && raw.counters.historicalAds) ?? null,
+            onlineAds: (raw.counters && raw.counters.onlineAds) ?? null,
+            followers: (raw.counters && raw.counters.followers) ?? null,
+        },
+        replyRate: badgeVal('replyRate'),          // z.B. "77%"
+        replySpeed: badgeVal('replySpeed') || (raw.replyIndicators && raw.replyIndicators.replySpeed) || null, // z.B. "12h"
+    };
+}
+
+// View-Counter: CAPI {"adId": "...", "value": N} oder Web-XHR {"numVisits": N}
+function normalizeViewCount(raw) {
+    if (!raw) return null;
+    const n = raw.value != null ? Number(raw.value) : (raw.numVisits != null ? Number(raw.numVisits) : null);
+    return { views: n };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { unwrapValue, normalizePriceType, normalizeAd, normalizeSearchResponse, normalizeAdResponse, NS };
+    module.exports = { unwrapValue, normalizePriceType, normalizeAd, normalizeSearchResponse, normalizeAdResponse, normalizeSellerProfile, normalizeViewCount, computeCommercialSuspicion, NS };
 }

@@ -37,4 +37,39 @@ const KAApi = {
     async search(params) {
         return this._send({ action: 'kaApiSearch', params });
     },
+
+    // Öffentliches Verkäuferprofil: Name, Registrierung, Badges, Zähler
+    // (historicalAds/onlineAds/followers), replyRate/replySpeed —
+    // Betrugs-/Verhandlungssignale (live verifiziert 2026-09-09).
+    async sellerProfile(userId) {
+        return this._send({ action: 'kaApiSellerProfile', userId: String(userId) });
+    },
+
+    // Weitere aktive Anzeigen desselben Verkäufers (auch PRIVATE!)
+    // -> Portfolio-Muster (Händler-tarnt-sich-als-Privat).
+    async sellerAds(adId) {
+        return this._send({ action: 'kaApiSellerAds', adId: String(adId) });
+    },
+
+    // View-Counter einer Anzeige (Nachfrage-/Verhandlungssignal)
+    async views(adId) {
+        return this._send({ action: 'kaApiViews', adId: String(adId) });
+    },
+
+    // --- Referenz-Endpunkte (MCP-Tool-Parität, siehe Doku §2b) ---
+    async categories() {
+        return this._send({ action: 'kaApiCategories' });
+    },
+    async categoryMetadata(categoryId) {
+        return this._send({ action: 'kaApiCategoryMeta', categoryId: String(categoryId) });
+    },
+    async categorySearchMetadata(categoryId) {
+        return this._send({ action: 'kaApiCategorySearchMeta', categoryId: String(categoryId) });
+    },
+    async locationSearch(q, depth) {
+        return this._send({ action: 'kaApiLocationSearch', q, depth });
+    },
+    async location(locationId) {
+        return this._send({ action: 'kaApiLocation', locationId: String(locationId) });
+    },
 };

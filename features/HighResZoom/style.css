@@ -40,3 +40,20 @@ body.ka-feature-highreszoom #ka-hover-overlay img {
     from { opacity: 0; transform: scale(0.95); }
     to { opacity: 1; transform: scale(1); }
 }
+
+/* Statistik-Schiene (2026-09-09): API-Daten rechts am zentrierten Bild */
+body.ka-feature-highreszoom #ka-preview-stats {
+    display: flex; flex-direction: column; gap: 4px;
+    max-width: 260px; max-height: 85vh; overflow-y: auto;
+    font: 13px system-ui; color: #eee; text-align: left;
+}
+body.ka-feature-highreszoom #ka-preview-stats .ka-ps-title {
+    font-weight: bold; font-size: 14px; line-height: 1.3; color: #fff;
+    margin-bottom: 4px;
+}
+body.ka-feature-highreszoom #ka-preview-stats .ka-ps-price {
+    font-weight: bold; font-size: 15px; color: #8bb13e;
+}
+body.ka-feature-highreszoom #ka-preview-stats .ka-ps-row {
+    opacity: .85;
+}

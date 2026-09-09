@@ -27,7 +27,9 @@ const KAUI = {
             `;
             btn.onclick = (e) => {
                 e.preventDefault();
-                window.location.href = 'https://www.kleinanzeigen.de/s-wohnung-mieten/anzeige:angebote/c203+wohnung_mieten.swap_s:nein';
+                // FIX 2026-09-09: anzeige:angebote-Segment ist tot (57 Mio. Treffer);
+                // funktionierendes Format ist Kategorie-ID im Pfad.
+                window.location.href = 'https://www.kleinanzeigen.de/s-wohnung-mieten/c203+wohnung_mieten.swap_s:nein';
             };
             
             parent.insertBefore(btn, searchContainer);
@@ -37,7 +39,7 @@ const KAUI = {
 
     injectDashboard() {
         if (document.getElementById('ka-analyzer-dashboard')) return;
-        const resultsList = document.querySelector('#srchrslt-results') || document.querySelector('.ad-list');
+        const resultsList = document.querySelector('#srchrslt-adtable') || document.querySelector('#srchrslt-results') || document.querySelector('.ad-list');
         if (resultsList) {
             const dash = document.createElement('div');
             dash.id = 'ka-analyzer-dashboard';
@@ -61,15 +63,15 @@ const KAUI = {
                 <div class="ka-matrix-grid">
                     <div class="ka-matrix-cell ka-low ${this.activeCategory === 'low' && this.activeRegion === r.plz ? 'active' : ''}" data-type="low" data-plz="${r.plz}">
                         <span class="ka-matrix-label">Günstig</span>
-                        <span class="ka-matrix-price">${r.q1.toFixed(2)} €</span>
+                        <span class="ka-matrix-price">${Math.round(r.q1).toLocaleString('de-DE')} €</span>
                     </div>
                     <div class="ka-matrix-cell ka-mid ${this.activeCategory === 'mid' && this.activeRegion === r.plz ? 'active' : ''}" data-type="mid" data-plz="${r.plz}">
                         <span class="ka-matrix-label">Mittel</span>
-                        <span class="ka-matrix-price">${r.median.toFixed(2)} €</span>
+                        <span class="ka-matrix-price">${Math.round(r.median).toLocaleString('de-DE')} €</span>
                     </div>
                     <div class="ka-matrix-cell ka-high ${this.activeCategory === 'high' && this.activeRegion === r.plz ? 'active' : ''}" data-type="high" data-plz="${r.plz}">
                         <span class="ka-matrix-label">Teuer</span>
-                        <span class="ka-matrix-price">${r.q3.toFixed(2)} €</span>
+                        <span class="ka-matrix-price">${Math.round(r.q3).toLocaleString('de-DE')} €</span>
                     </div>
                 </div>
                 <div class="ka-matrix-footer">
@@ -156,14 +158,80 @@ const KAUI = {
         let badge = article.querySelector('.ka-sqm-badge');
         if (!badge) {
             badge = document.createElement('div'); badge.className = 'ka-sqm-badge';
-            const box = article.querySelector('.aditem-main--middle--price-shipping') || article.querySelector('.aditem-main--middle');
-            if (box) box.appendChild(badge);
+            // Anker-Kaskade (2026-09-09): .aditem-main--middle* ist tot (Tailwind-
+            // Redesign, live verifiziert) -- Fallback haengt den Badge direkt an
+            // die Karte (article, position:relative via CSS) .
+            const box = article.querySelector('.aditem-main--middle--price-shipping')
+                || article.querySelector('.aditem-main--middle')
+                || article;
+            box.appendChild(badge);
+            if (box === article) badge.classList.add('ka-sqm-badge-float');
         }
-        badge.innerText = `${pricePerSqm.toFixed(2).replace('.', ',')} €/m²`;
+        // Deal-Score (2026-09-09): >20% unter dem Such-Median = Ankaufskandidat
+        // (Octoparse/jkopka-Pattern, Median kommt aus kaStats.calculate)
+        badge.innerHTML = '';
+        const priceSpan = document.createElement('span');
+        // Ganzzahl reicht (2026-09-09): "12 EUR/m2" statt "12,50" -- die Dezimalen
+        // suggerieren Genauigkeit, die die m2-Schaetzung ohnehin nicht hat.
+        priceSpan.textContent = `${Math.round(pricePerSqm).toLocaleString('de-DE')} €/m²`;
+        badge.appendChild(priceSpan);
+        if (stats && stats.median && pricePerSqm <= stats.median * 0.8) {
+            const deal = document.createElement('span');
+            deal.className = 'ka-deal-chip';
+            const pct = Math.round((1 - pricePerSqm / stats.median) * 100);
+            deal.textContent = `Deal −${pct}%`;
+            deal.title = `Median dieser Suche: ${Math.round(stats.median).toLocaleString('de-DE')} €/m²`;
+            badge.appendChild(deal);
+        }
         if (pricePerSqm < stats.lowerFence || pricePerSqm > stats.upperFence) article.classList.add('ka-outlier');
         else if (pricePerSqm <= stats.q1) article.classList.add('ka-price-low');
         else if (pricePerSqm <= stats.q3) article.classList.add('ka-price-mid');
         else article.classList.add('ka-price-high');
+    },
+
+    // On-Demand-Enrichment-Anzeige (2026-09-09): GPS/Seller/Views am Badge als
+    // Tooltip + zweite Zeile. Wird vom KARentalEnrich-Modus gefuettert.
+    updateEnrichment(article, info) {
+        const badge = article.querySelector('.ka-sqm-badge');
+        if (!badge || !info) return;
+        const parts = [];
+        if (info.location) {
+            parts.push(`📍 ${info.location.zip || '?'} ${info.location.name || ''}`);
+            if (info.location.lat != null) parts.push(`GPS ${info.location.lat.toFixed(3)}, ${info.location.lng.toFixed(3)}`);
+        }
+        if (info.seller) {
+            parts.push(`👤 ${info.seller.accountType || '?'} · ★${info.seller.rating != null ? info.seller.rating : '?'} · seit ${(info.seller.since || '?').slice(0, 10)}`);
+        }
+        if (info.views != null) parts.push(`👁 ${info.views}`);
+        if (info.ageDays != null) parts.push(`🗓 ${info.ageDays} Tage online`);
+        if (info.originalAmount != null && info.price && info.price.amount != null) {
+            parts.push(`⬇️ Preisreduktion von ${info.price.originalAmount} €`);
+        }
+        let flags = [];
+        if (info.suspicious) flags.push('🚩 ' + (info.suspicious.reason || 'Gewerbe im Privat-Gewand'));
+        if (info.stale) flags.push('💤 verstaubt: viele Views + alt → Verhandlungsspielraum');
+
+        let line = badge.querySelector('.ka-enrich-line');
+        if (!line) {
+            line = document.createElement('div');
+            line.className = 'ka-enrich-line';
+            badge.appendChild(line);
+        }
+        line.textContent = parts.join(' · ') + (flags.length ? ' · ' + flags.join(' · ') : '');
+        badge.title = parts.join('\n') + (flags.length ? '\n' + flags.join('\n') : '');
+    },
+
+    setEnrichmentPending(article) {
+        const badge = article.querySelector('.ka-sqm-badge');
+        if (!badge) return null;
+        let line = badge.querySelector('.ka-enrich-line');
+        if (!line) {
+            line = document.createElement('div');
+            line.className = 'ka-enrich-line';
+            badge.appendChild(line);
+        }
+        line.textContent = '🔎 Lade Details (API)...';
+        return line;
     },
 
     hideAd(ad) {
