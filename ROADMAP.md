@@ -3,7 +3,7 @@
 Geführt seit 2026-09-09. Detail-SSOT mit Begründungen/Quellen: `docs/kleinanzeigen-api.md`
 (§7 Phase 2, §9 Roadmaps). Priorität = empfohlene Abarbeitungsreihenfolge.
 
-## P0 — Sofort-Wins (je 1 Zeile / kleiner Patch, 1 Session)
+## P0 — Sofort-Wins ✅ ERLEDIGT + live verifiziert (Commits 5c25989/7889b82, 2026-09-09)
 
 | # | Was | Warum |
 |---|---|---|
@@ -21,7 +21,11 @@ Fixt Kontext-Tod, seitenunabhängiges Aufnehmen, EIN Ort für Feature-Schalter.
 Details: `docs/kleinanzeigen-api.md` §9-Tabelle. Mit dabei: `commands`-Shortcut,
 `minimum_chrome_version: 151`, Popup-Retirement.
 
-## P2 — McpBridge v2: Extension als MCP-Server für Agenten
+## P2 — McpBridge v2: Extension als MCP-Server für Agenten ✅ ERLEDIGT (v2.1, Commit 7889b82, E2E verifiziert)
+
+`core/anchors.js` (KbAnchors-Muster) ebenfalls erledigt — live verifiziert auf
+Suchseiten; Detailseiten-Check offen (blockiert durch KA-Hydration-Bug, siehe
+docs/kleinanzeigen-api.md §„Incident", nach KA-Fix nachholen).
 
 User-Vision: laufende Extension per Menüeintrag (`feature_McpBridge`) als Endpunkt,
 an dem Coding-Agents (opencode) Kleinanzeigen nutzen. Schritte:
