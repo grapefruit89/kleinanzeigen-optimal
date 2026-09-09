@@ -1,195 +1,93 @@
-// FEATURE: ProAdManager
+// FEATURE: ProAdManager (FELSENFEST -- hartverdrahtet, kein Toggle)
 // INTENT:
-//   Werbe-/Filler-Slots (Liberty/GPT-Luecken ohne Inhalt) in der Suchliste
-//   per CSS-Klasse ausblenden, PRO-Anzeigen zaehlen/optional ausblenden
-//   (Dashboard-Button ueber der Ergebnisliste).
-// WORKS WHEN:
-//   Auf /s-.../ zeigt das Dashboard "<N> Anzeigen" mit N > 0 direkt ueber
-//   der Ergebnisliste, und Liberty/GPT-Luecken (leere Slots) sind weg.
-// ANCHOR (2026-08-29 live):
-//   Karten: article[data-adid] + closest('li')
+//   Suchliste sauber halten: Liberty/GPT-Filler-Slots (graue Luecken) und
+//   komplett gewerbliche Anzeigen (PRO-/TOP-Badge) ausblenden. Kein
+//   Feature-Flag, kein Menueeintrag, kein Dashboard mehr (2026-09-09
+//   entschlackt -- der alte Zaehler-Button ist entfallen).
+// ANCHOR (2026-09-09 live, /s-wohnung-mieten/c203+...):
+//   Karten: article[data-adid], Wrapper-<li> via closest('li')
 //   Filler: li:has(div[id^="srpb-result-list"]|.liberty-hide-unfilled|
-//           div[id^="google_ads_iframe"]) -- EIGENER Scan, nicht als Kind
-//           einer Ad-Karte gesucht (siehe BUGFIX-Kommentar unten: 7 von 34
-//           <li> im Ergebnis-Grid haben gar keine Ad-Karte drin)
-//   Dashboard-Anker: #srchrslt-adtable
+//           div[id^="google_ads_iframe"])
+//   TOP-Badge: Leaf mit Text "TOP" in der Karte (Wrapper: flex-row gap-
+//              xxsmall, live verifiziert via BadgeRemover-Audit)
+//   PRO-Badge: Leaf mit Text "PRO" in der Karte ODER a[href^="/pro/"]
+//   29.08.2026: 7 von 34 <li> in #srchrslt-adtable sind reine Filler-Slots
+//   ohne eigene Ad-Karte -- deshalb Filler separat scannen, NICHT nur
+//   article[data-adid] als Startpunkt nehmen.
+// WORKS WHEN:
+//   Keine grauen Luecken und keine TOP/PRO-kitschierten Karten mehr in der
+//   Ergebnisliste.
 // BROKEN IF:
-//   "<N> Anzeigen"-Text im Dashboard bleibt bei 0 trotz sichtbarer Karten
-//   ODER Dashboard erscheint gar nicht auf einer echten /s-.../-Seite
-//   ODER graue leere Kacheln bleiben in der Liste trotz Dashboard-Zahl > 0
+//   Graue Luecken bleiben sichtbar (neuer Filler-Selector -> erweitern) ODER
+//   regulare Anzeigen verschwinden (Badge-Erkennung zu breit -> text-
+//   basierte Leaf-Erkennung duerfen nicht auf Titel/Teaser fallen: "TOP"/
+//   "PRO" als woertlicher Anzeigentitel wuerde fahrlaessig ausgeblendet).
 // DO NOT:
-//   PRO/TOP ueber DOM-Klassen erkennen (isProBadge ist bewusst false) --
-//   die Sponsoring-Info liegt jetzt in einem JSON-Blob im props-Attribut
-//   eines <astro-island> (sponsoredAdPresent/resultAds), noch nicht gegen
-//   eine echte TOP-Karte verifiziert. Erst Mapping bestaetigen, dann
-//   wieder aktivieren -- nicht raten (siehe Chat 29.08.2026).
+//   Elemente REMOVEN -- React/Astro besitzt die Knoten. Nur Klassen setzen,
+//   CSS macht display:none (style.css, gated auf body.ka-feature-
+//   proadmanager -- diese Klasse wird hier immer gesetzt).
 
-KAFeatureManager.register('ProAdManager', async () => {
-    // Startseite ignorieren
-    if (window.location.pathname === '/' || window.location.pathname === '') {
-        return;
+(() => {
+    document.body.classList.add('ka-feature-proadmanager');
+
+    const BADGE_TEXTS = new Set(['TOP', 'PRO']);
+
+    const fillerSelector = 'li:has(div[id^="srpb-result-list"]), li:has(.liberty-hide-unfilled), li:has(div[id^="google_ads_iframe"])';
+
+    function hasPaidBadge(ad) {
+        // a[href^="/pro/"] = sicherer Anker; Text-Badges nur als Leaf innerhalb
+        // der Karte zaehlen (Titel/Teaser sind selbst Leaf-Elemente, wuerden
+        // sonst bei woertlichem "PRO"/"TOP" im Titel faelschlich treffen --
+        // deshalb children.length === 0 UND Klassen-Heuristik accent/strong).
+        if (ad.querySelector('a[href^="/pro/"]')) return true;
+        for (const el of ad.querySelectorAll('div, span')) {
+            if (el.children.length !== 0) continue;
+            const text = el.textContent.trim();
+            if (!BADGE_TEXTS.has(text)) continue;
+            const cls = (el.className || '').toString();
+            if (/bg-accent|font-strong/.test(cls)) return true;
+        }
+        // SVG-Glyph-Fallback (Quelle: r-unruh/kleinanzeigen-filter, 2026 live):
+        // TOP rendert in manchen Kategorien als SVG statt Text -- der Glyph-Pfad
+        // zeichnet die Buchstaben "TOP". Start des Pfads reicht als Anker.
+        const TOP_GLYPH_PATH = 'M8.168 13H9.62';
+        if (ad.querySelector(`path[d^="${TOP_GLYPH_PATH}"]`)) return true;
+        return false;
     }
 
-    const storageKey = 'ka_show_pros_state';
-    let savedState = await KAStorage.get(storageKey, true);
-
-    if (savedState) {
-        document.body.classList.add('ka-show-pro');
-    }
-
-    let validAdsCount = 0;
-    let proAdsCount = 0;
-    let isProcessing = false;
-
-    function cleanUp() {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        // 29.08.2026 live gefunden: li.ad-listitem existiert nicht mehr (0 Treffer) --
-        // die GESAMTE cleanUp()-Logik lief seitdem ins Leere, jeden einzigen Aufruf,
-        // ohne dass das sichtbar war (kein Fehler, einfach eine leere NodeList). Neuer
-        // Anker: article[data-adid] (gleiche Basis wie DataExport/WasdNavigation/
-        // RentalAnalyzer), Wrapper-<li> via closest('li').
-        //
-        // BUGFIX 29.08.2026: Filler-Slots separat scannen, nicht als Kind einer
-        // Ad-Karte suchen. Live bestaetigt: von 34 <li> in #srchrslt-adtable haben 7
-        // GAR KEIN article[data-adid] -- reine Liberty-Filler-Slots
-        // (data-liberty-position-name="srpb-result-list-N") in eigenen <li>-Elementen.
-        // Wer nur article[data-adid] als Startpunkt nimmt (wie zuerst hier gemacht),
-        // sieht diese 7 Loecher nie -- der Zaehler im Dashboard stimmt trotzdem
-        // (WORKS WHEN war nur halb erfuellt), die grauen Luecken bleiben aber sichtbar.
-        const fillerSelector = 'li:has(div[id^="srpb-result-list"]), li:has(.liberty-hide-unfilled), li:has(div[id^="google_ads_iframe"])';
+    function sweep() {
+        let fillers = 0, paid = 0;
         document.querySelectorAll(fillerSelector).forEach(li => {
-            li.classList.add('ka-pad-filler-hidden'); // CSS-hide statt remove() -- React besitzt diesen Knoten
+            if (!li.classList.contains('ka-pad-filler-hidden')) {
+                li.classList.add('ka-pad-filler-hidden');
+            }
+            fillers++;
         });
 
-        const listItems = Array.from(document.querySelectorAll('article[data-adid]'))
-            .map(ad => ad.closest('li'))
-            .filter(Boolean);
-
-        let currentValid = 0;
-        let currentPro = 0;
-
-        listItems.forEach(li => {
-            // Filler-<li> wurden oben schon separat behandelt -- ein <li> mit
-            // article[data-adid] UND einem Filler-Slot drin kommt zwar praktisch
-            // nicht vor, aber sicherheitshalber trotzdem ueberspringen statt doppelt
-            // zu zaehlen.
-            if (li.classList.contains('ka-pad-filler-hidden')) return;
-
-            const ad = li.querySelector('article[data-adid]');
-            if (!ad) return;
-
-            // PRO/TOP-Erkennung -- 29.08.2026 DEAKTIVIERT, nicht nur repariert:
-            // .aditem-image--badges--badge-topad, .aditem-main--top--right und
-            // .badge-hint-pro-small-srp existieren alle nicht mehr (0 Treffer live).
-            // Die Sponsoring-Info liegt jetzt nicht mehr im sichtbaren DOM, sondern als
-            // JSON im props-Attribut eines <astro-island> (gefunden: Attribut "props"
-            // enthaelt "sponsoredAdPresent"/"resultAds"-Array). Das ist keine einfache
-            // Selektor-Korrektur mehr, sondern erfordert eigenes Parsen dieses JSON-Props
-            // und ein Zuordnen der Eintraege zu den data-adid-Werten -- dafuer fehlt live
-            // noch ein bestaetigtes Beispiel (in dieser Session keine TOP-Anzeige mit
-            // sichtbarem Badge gefunden, um das Mapping zu verifizieren). Bis das separat
-            // untersucht ist, bleibt PRO-Erkennung bewusst aus (kein Verstecken/Markieren)
-            // statt mit einer geratenen, unverifizierten Regel falsch positiv zu hidden.
-            const isProBadge = false;
-            const isProLink = ad.querySelector('a[href^="/pro/"]') !== null;
-
-            if (isProBadge || isProLink) {
+        for (const ad of document.querySelectorAll('article[data-adid]')) {
+            const li = ad.closest('li');
+            if (!li || li.classList.contains('ka-pad-filler-hidden')) continue;
+            if (hasPaidBadge(ad)) {
                 li.classList.add('ka-pro-hidden');
-                currentPro++;
+                paid++;
             } else {
                 li.classList.remove('ka-pro-hidden');
             }
-
-            currentValid++;
-        });
-
-        if (currentValid !== validAdsCount || currentPro !== proAdsCount) {
-            validAdsCount = currentValid;
-            proAdsCount = currentPro;
-            updateDashboard();
         }
-
-        setTimeout(() => { isProcessing = false; }, 50);
+        return { fillers, paid };
     }
 
-    function initDashboard() {
-        // 29.08.2026 live gefunden: .srp-header existiert nicht mehr (0 Treffer) --
-        // Dashboard wurde deshalb NIE injiziert. Neuer Anker: #srchrslt-adtable
-        // (live bestaetigt vorhanden), Dashboard wird direkt davor eingefuegt.
-        const resultsContainer = document.getElementById('srchrslt-adtable');
-        if (!resultsContainer) return;
+    // Debounced MutationObserver (400ms, wie alle anderen Module) -- der Sweep
+    // veraendert selbst Klassen, ohne Debounce wuerde er sich endlos selbst
+    // triggern. Beobachtet body subtree, damit SPA-Navigation und Nachladen
+    // abgedeckt sind.
+    let timer = null;
+    const observer = new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(sweep, 400);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 
-        if (!document.getElementById('ka-dashboard-container')) {
-            const dashboard = document.createElement('div');
-            dashboard.id = 'ka-dashboard-container';
-            dashboard.innerHTML = `
-                <span id="ka-dashboard-text">Lade Daten...</span>
-                <button id="ka-dashboard-btn">
-                    <span class="ka-dashboard-badge">PRO</span>
-                    <span class="ka-btn-label">initialisieren</span>
-                </button>
-            `;
-            resultsContainer.parentNode.insertBefore(dashboard, resultsContainer);
-
-            document.getElementById('ka-dashboard-btn').addEventListener('click', async () => {
-                const isActive = document.body.classList.toggle('ka-show-pro');
-                await KAStorage.set(storageKey, isActive);
-                updateDashboard();
-            });
-        }
-        updateDashboard();
-    }
-
-    function updateDashboard() {
-        const textSpan = document.getElementById('ka-dashboard-text');
-        const btn = document.getElementById('ka-dashboard-btn');
-        if (!textSpan || !btn) return;
-
-        const isShowingPro = document.body.classList.contains('ka-show-pro');
-        const badgeHtml = `<span class="ka-dashboard-badge">PRO</span>`;
-
-        if (isShowingPro) {
-            textSpan.innerHTML = `${validAdsCount} Anzeigen davon ${proAdsCount} ${badgeHtml}`;
-            btn.innerHTML = `${badgeHtml} <span class="ka-btn-label">ausblenden</span>`;
-        } else {
-            if (proAdsCount > 0) {
-                textSpan.innerHTML = `${validAdsCount} Anzeigen davon ${proAdsCount} ${badgeHtml} ausgeblendet`;
-                btn.innerHTML = `${badgeHtml} <span class="ka-btn-label">anzeigen</span>`;
-            } else {
-                textSpan.innerHTML = `${validAdsCount} Anzeigen (Keine ${badgeHtml} gefunden)`;
-                btn.innerHTML = `${badgeHtml} <span class="ka-btn-label">anzeigen</span>`;
-            }
-        }
-    }
-
-    // Init -- gedebounced (400ms, wie die anderen Module): cleanUp() veraendert selbst
-    // das DOM (Klassen setzen), was den eigenen
-    // Observer sonst bei jedem Durchlauf erneut triggert. Ohne Debounce war das der
-    // sechste gefundene Freeze-Kandidat dieser Session.
-    //
-    // BUGFIX 29.08.2026 (Grok-Review, live bestaetigt): Observer beobachtete bisher
-    // document.body -- parallel zu RentalAnalyzer/InPageMenu/HighResZoom-Fallback macht
-    // das mehrere volle Body-Observer gleichzeitig, obwohl cleanUp()/initDashboard() nur
-    // Aenderungen INNERHALB der Ergebnisliste interessieren. Beobachtet jetzt nur noch
-    // #srchrslt-adtable selbst; existiert der Container beim ersten Lauf noch nicht
-    // (z.B. sehr fruehes document_idle), greift initDashboard()'s eigener null-Check und
-    // der Observer startet einfach nicht -- auf echten Ergebnisseiten ist der Container
-    // zu diesem Zeitpunkt schon da (live bestaetigt), aendert sich also nichts.
-    let debounceTimer = null;
-    const resultsContainer = document.getElementById('srchrslt-adtable');
-    if (resultsContainer) {
-        const observer = new MutationObserver(() => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                cleanUp();
-                initDashboard();
-            }, 400);
-        });
-        observer.observe(resultsContainer, { childList: true, subtree: true });
-    }
-
-    cleanUp();
-    initDashboard();
-});
+    sweep();
+    console.log('[KA-PRO-ADMANAGER] aktiv (Filler-Slots + TOP/PRO-Anzeigen ausgeblendet)');
+})();

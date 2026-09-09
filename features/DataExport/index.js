@@ -3,17 +3,27 @@
 //   Suchergebnisse (mehrere Seiten) als JSONL exportieren, optional mit
 //   nachgeladener Anzeigen-Detailseite (Volltext, Datum, Versand) --
 //   Rohstoff fuer LLM/Marktuebersicht, keine perfekt normalisierte DB.
+//   Seit 2026-09-09: Detail-Enrichment API-FIRST ueber die Mobile-API
+//   (api.kleinanzeigen.de, siehe docs/kleinanzeigen-api.md) -- GPS,
+//   Seller-Rating, Attribute und normierte Preis-Typen kommen aus der
+//   Feld-API statt aus Heuristik; die DOM-Detail-Fetches bleiben als
+//   Fallback-Layer (Drei-Quellen-Schichten, vgl. mydealz-Methodik).
 // WORKS WHEN:
 //   Auf /s-.../ liefert Start-Klick "Ads Found" > 0 und nach Abschluss eine
 //   .jsonl-Datei mit id_of_ad + title + price bei jeder Zeile.
-// ANCHOR (2026-08-29 live):
+// ANCHOR (2026-09-09 live):
 //   Liste:  article[data-adid]  (data-href = Detaillink, kein <a> mehr noetig)
+//   Titel:  h2 a ?? h2 ?? h3 a ?? h3 -- die Seite A/B-testet zwei Layouts
+//           (Quelle: r-unruh/kleinanzeigen-filter), deshalb DUAL-Selektor
 //   Seite2+: /seite:N/-Pfadsegment selbst bauen (kein Next-Link mehr)
 //   Detail: #viewad-description, #viewad-extra-info (Datum),
 //           .boxedarticle--details--shipping (Versand -- NICHT body-weit
 //           scannen: die "Aehnliche Anzeigen"-Sidebar auf der Detailseite
 //           laeuft noch auf altem article.aditem-Markup und liefert sonst
 //           falsche Treffer aus fremden Anzeigen)
+// CAP (2026-09-09, von den Profi-Actors uebernommen):
+//   Kleinanzeigen deckelt JEDE Suche bei ~1.250 Ergebnissen = 50 Seiten.
+//   maxPages ist daher hart auf 50 gekappt (auch im UI), hoeher geht nicht.
 // BROKEN IF:
 //   0 Treffer bei article[data-adid] auf einer echten /s-.../-Seite
 //   ODER "Pages Scanned" bleibt bei 1 trotz Max. Seiten > 1 und mehreren
@@ -38,6 +48,11 @@ KAFeatureManager.register('DataExport', async () => {
         maxPages: 5,
         fetchFullDetails: true
     };
+
+    // CAP (2026-09-09): Kleinanzeigen deckelt jede Suche bei ~1.250
+    // Ergebnissen = 50 Seiten. Hoeher ansetzen bringt exakt nichts --
+    // deshalb hart kappen (UI-Input max=50, hier nochmal als Guard).
+    const MAX_PAGES_HARD_CAP = 50;
 
     function sanitizeFilename(name) {
         return (name || 'kleinanzeigen_export').replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').trim();
@@ -80,15 +95,19 @@ KAFeatureManager.register('DataExport', async () => {
         }
     }
 
-    // typ: "fest" | "vb" | "verschenken" | "anfrage" -- getrennt von betrag, damit
-    // "auf Anfrage"/"VB ohne Zahl" nicht mit einem echten Festpreis verwechselt wird.
+    // typ: "fest" | "vb" | "vb_ohne_zahl" | "verschenken" | "anfrage" -- getrennt
+    // von betrag, damit "auf Anfrage"/"VB ohne Zahl" nicht mit einem echten
+    // Festpreis verwechselt wird. price_type_norm: normiertes Vokabular, das
+    // auch die Mobile-API und die Profi-Scraper nutzen (2026-09-09):
+    //   fest -> FIXED | vb -> MIN_BID | vb_ohne_zahl -> FAST_BID
+    //   verschenken -> GIVEAWAY | anfrage -> SEE_DESCRIPTION
     function parsePrice(priceString) {
         try {
-            if (!priceString) return { betrag: null, zusatz: null, typ: 'anfrage' };
+            if (!priceString) return { betrag: null, zusatz: null, typ: 'anfrage', price_type_norm: 'SEE_DESCRIPTION' };
             const cleanString = priceString.replace(/\s+/g, ' ').trim();
 
             if (/zu verschenken/i.test(cleanString)) {
-                return { betrag: null, zusatz: null, typ: 'verschenken' };
+                return { betrag: null, zusatz: null, typ: 'verschenken', price_type_norm: 'GIVEAWAY' };
             }
 
             const betragMatch = cleanString.match(/(\d[\d\.]*)/);
@@ -98,18 +117,24 @@ KAFeatureManager.register('DataExport', async () => {
                 betrag = parseFloat(betragMatch[1].replace(/\./g, '').replace(/,/g, '.'));
             }
 
-            let typ;
-            if (betrag === null) {
-                typ = 'anfrage'; // z.B. "VB" ganz ohne Zahl auf der Karte
+            let typ, norm;
+            if (betrag === null && isVb) {
+                typ = 'vb_ohne_zahl';
+                norm = 'FAST_BID';
+            } else if (betrag === null) {
+                typ = 'anfrage';
+                norm = 'SEE_DESCRIPTION';
             } else if (isVb) {
                 typ = 'vb';
+                norm = 'MIN_BID';
             } else {
                 typ = 'fest';
+                norm = 'FIXED';
             }
 
-            return { betrag, zusatz: isVb ? 'VB' : null, typ };
+            return { betrag, zusatz: isVb ? 'VB' : null, typ, price_type_norm: norm };
         } catch (e) {
-            return { betrag: null, zusatz: null, typ: 'anfrage' };
+            return { betrag: null, zusatz: null, typ: 'anfrage', price_type_norm: 'SEE_DESCRIPTION' };
         }
     }
 
@@ -124,7 +149,10 @@ KAFeatureManager.register('DataExport', async () => {
                 const href = article.getAttribute('data-href');
                 if (href) data.link = href.startsWith('http') ? href : `https://www.kleinanzeigen.de${href}`;
 
-                const heading = article.querySelector('h2, h3');
+                // Dual-Selektor (2026-09-09): die Seite A/B-testet zwei Layouts --
+                // Titel kann h2 a / h2 / h3 a / h3 sein (Quelle:
+                // r-unruh/kleinanzeigen-filter, live am selben Stand).
+                const heading = article.querySelector('h2 a, h2, h3 a, h3');
                 if (heading) data.title = heading.textContent.trim().replace(/\s+/g, ' ');
 
                 const paragraphs = Array.from(article.querySelectorAll('p'))
@@ -285,25 +313,58 @@ KAFeatureManager.register('DataExport', async () => {
             }
         }
 
-        // Zweite Phase: pro gefundener Anzeige die Detailseite laden und
-        // Vollbeschreibung/Datum/Versand nachladen -- deshalb bewusst NICHT
-        // parallel (Promise.all), sondern sequentiell mit randomisierter Pause,
-        // gleiches Datadome-Schutzmuster wie bei der Seiten-Paginierung oben.
+        // Zweite Phase: pro gefundener Anzeige nachladen -- API-FIRST (2026-09-09):
+        // Die Mobile-API liefert auf einen Schlag, wofuer vorher DOM-Heuristik
+        // noetig war: Vollbeschreibung, Einstellzeitpunkt, GPS, Seller-Rating,
+        // Attribute und normierten Preis-Typ. Schlägt die API fehl (Cap, 403,
+        // Netzwerk), faellt der DOM-Fetch auf die Detailseite zurueck. Sequen-
+        // tiell mit Pausen -- die Queue im Background-Worker pausiert zudem
+        // selbst (500-1000ms), deshalb hier nur Abort-Checks, keine extra
+        // randomWait mehr noetig (der Background serialisiert + bremst).
         if (state.fetchFullDetails) {
             for (let i = 0; i < state.allAds.length; i++) {
                 if (!state.isScraping || state.abortController.signal.aborted) break;
                 const ad = state.allAds[i];
-                if (!ad.link) continue;
+                if (!ad.id_of_ad) continue;
 
-                updateProgress(`Lade Details ${i + 1}/${state.allAds.length}...`, state.pagesScanned, state.allAds.length);
+                updateProgress(`Enrich ${i + 1}/${state.allAds.length} (API)...`, state.pagesScanned, state.allAds.length);
 
-                const details = await fetchAdDetails(ad.link, state.abortController.signal);
-                ad.description_full = details.description_full;
-                ad.eingestellt_am = details.eingestellt_am;
-                ad.versand_moeglich = details.versand_moeglich;
+                let enriched = false;
+                if (typeof KAApi !== 'undefined') {
+                    const resp = await KAApi.getAd(ad.id_of_ad);
+                    if (resp.ok && resp.ad) {
+                        const api = resp.ad;
+                        enriched = true;
+                        if (api.description) ad.description_full = api.description;
+                        if (api.startDateTime) ad.eingestellt_am_api = api.startDateTime;
+                        if (api.price) ad.price_type_norm = api.price.type;
+                        if (api.price && api.price.amount != null) ad.preis_api = { betrag: api.price.amount, waehrung: api.price.currency, raw_typ: api.price.rawType };
+                        if (api.location) ad.gps = { lat: api.location.lat, lng: api.location.lng, radius_km: api.location.radiusKm };
+                        if (api.address) ad.adresse = api.address;
+                        if (api.seller) ad.verkaeufer = {
+                            user_id: api.seller.userId,
+                            typ: api.seller.accountType,
+                            name: api.seller.name,
+                            bewertung: api.seller.rating,
+                            badges: api.seller.badges,
+                            registriert_seit: api.seller.since,
+                        };
+                        if (api.attributes && api.attributes.length) ad.attribute = api.attributes;
+                        if (api.category) ad.kategorie_api = api.category;
+                        if (api.url) ad.link_api = api.url;
+                        ad.is_wanted = api.isWanted === true;
+                        if (api.pictures && api.pictures.length && !ad.bild) ad.bild = api.pictures[0];
+                    }
+                }
 
-                if (i < state.allAds.length - 1) {
-                    await randomWait(900, 1700);
+                if (!enriched && ad.link) {
+                    // DOM-Fallback (Layer 3): Detailseite holen und alte
+                    // Selektoren nutzen -- funktioniert auch ohne API.
+                    updateProgress(`Lade Details ${i + 1}/${state.allAds.length} (DOM)...`, state.pagesScanned, state.allAds.length);
+                    const details = await fetchAdDetails(ad.link, state.abortController.signal);
+                    ad.description_full = details.description_full;
+                    ad.eingestellt_am = details.eingestellt_am;
+                    ad.versand_moeglich = details.versand_moeglich;
                 }
             }
         }
@@ -323,7 +384,7 @@ KAFeatureManager.register('DataExport', async () => {
         }
 
         // READ LIMIT
-        state.maxPages = parseInt(limitInput.value) || 5;
+        state.maxPages = Math.min(parseInt(limitInput.value) || 5, MAX_PAGES_HARD_CAP);
         state.fetchFullDetails = !!(fulltextInput && fulltextInput.checked);
 
         // START
@@ -431,7 +492,9 @@ KAFeatureManager.register('DataExport', async () => {
         limitInput.id = 'md-scraper-limit';
         limitInput.value = '5';
         limitInput.min = '1';
-        limitInput.max = '100';
+        // CAP: KA deckelt jede Suche bei ~1.250 Ergebnissen (50 Seiten) --
+        // hoeher war immer tote UI-Versprechung (2026-09-09 gedeckelt).
+        limitInput.max = '50';
         limitInput.style.cssText = 'width: 60px; padding: 2px 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center;';
 
         limitContainer.appendChild(limitLabel);

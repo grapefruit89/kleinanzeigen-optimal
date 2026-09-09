@@ -10,7 +10,8 @@
     "declarativeNetRequestFeedback"
   ],
   "host_permissions": [
-    "https://www.kleinanzeigen.de/*"
+    "https://www.kleinanzeigen.de/*",
+    "https://api.kleinanzeigen.de/*"
   ],
   "background": {
     "service_worker": "core/background.js"
@@ -19,7 +20,7 @@
     "rule_resources": [
       {
         "id": "ruleset_1",
-        "enabled": false,
+        "enabled": true,
         "path": "rules.json"
       }
     ]
@@ -37,8 +38,9 @@
     {
       "matches": ["https://www.kleinanzeigen.de/*"],
       "js": [
-        "core/Storage.js",
         "core/FeatureManager.js",
+        "core/kaApi.js",
+        "core/kaApiNormalize.js",
         "features/RentalAnalyzer/parser.js",
         "features/RentalAnalyzer/stats.js",
         "features/RentalAnalyzer/ui.js",
@@ -52,7 +54,8 @@
         "features/CleanHomepage/index.js",
         "features/ProAdManager/index.js",
         "features/DataExport/index.js",
-        "features/McpBridge/index.js"
+        "features/McpBridge/index.js",
+        "features/BadgeRemover/index.js"
       ],
       "css": [
         "features/RentalAnalyzer/style.css",

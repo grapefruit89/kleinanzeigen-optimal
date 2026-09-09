@@ -1,4 +1,10 @@
-const KAStorage = {
+// var statt const + Vorhanden-Check: dieses File wird von ZWEI Content-Script-
+// Bloecken geladen (document_start fuer InPageMenu, frueher auch document_idle)
+// -- doppeltes const KAStorage im selben Isolated-World wirft sonst
+// "Identifier has already been declared" und LEGT DIE GESAMTE ERWEITERUNG LAHM
+// (Bug 2026-09-09 im Seiten-Kontext gefunden: core/Storage.js:1 SyntaxError).
+// var + Guard macht die Injektion idempotent.
+var KAStorage = (typeof KAStorage !== 'undefined') ? KAStorage : {
     _cache: {},
 
     featureKey(id) {

@@ -7,9 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         feature_SortSaver: document.getElementById('feature_SortSaver'),
         feature_WidescreenLayout: document.getElementById('feature_WidescreenLayout'),
         feature_AutoShowMore: document.getElementById('feature_AutoShowMore'),
-        feature_TrackerBlocker: document.getElementById('feature_TrackerBlocker'),
         feature_CleanHomepage: document.getElementById('feature_CleanHomepage'),
-        feature_ProAdManager: document.getElementById('feature_ProAdManager'),
         feature_DataExport: document.getElementById('feature_DataExport')
     };
 
@@ -23,13 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
             checkbox.addEventListener('change', () => {
                 settings[KAStorage.featureKey(key)] = checkbox.checked === true;
                 chrome.storage.local.set({ ka_settings: settings });
-
-                if (key === 'feature_TrackerBlocker') {
-                    chrome.runtime.sendMessage({
-                        action: 'updateTrackerBlocker',
-                        enabled: checkbox.checked === true
-                    });
-                }
 
                 chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
                     if (tabs[0]) chrome.tabs.reload(tabs[0].id);

@@ -9,9 +9,11 @@
         { id: 'feature_SortSaver', name: 'Sortierung speichern', desc: 'Speichert deine bevorzugte Sortierung (z.B. Neueste).' },
         { id: 'feature_WidescreenLayout', name: 'Widescreen Layout', desc: 'Nutzt den Platz auf grossen Monitoren besser aus.' },
         { id: 'feature_AutoShowMore', name: 'Auto Mehr anzeigen', desc: 'Klickt automatisch auf Mehr anzeigen auf der Startseite.' },
-        { id: 'feature_TrackerBlocker', name: 'Tracker-Blocker', desc: 'Blockiert Tracking-Skripte auf Netzwerk-Ebene.' },
+        // feature_TrackerBlocker: FELSENFEST (2026-09-09) -- Ruleset laeuft immer,
+        // kein Toggle. Ebenso BadgeRemover (gar nicht gelistet, hartverdrahtet).
         { id: 'feature_CleanHomepage', name: 'Startseite aufraeumen', desc: 'Versteckt Kategorien und irrelevante Bloecke (Tier 2).' },
-        { id: 'feature_ProAdManager', name: 'Pro-Anzeigen Manager', desc: 'Sortiert gewerbliche Ads ganz nach oben und markiert sie.' },
+        // feature_ProAdManager: FELSENFEST (2026-09-09) -- Filler-Slots und
+        // TOP/PRO-Anzeigen werden immer ausgeblendet, kein Toggle mehr.
         { id: 'feature_DataExport', name: 'Datenexport (Auto-Scraper)', desc: 'Vollautomatischer Such-Scraper fuer LLM-Daten (JSONL).' },
         { id: 'feature_McpBridge', name: 'MCP Bridge (DevTools)', desc: 'Lokaler WS 127.0.0.1:8765, nur mit Token. Dev-only.' }
     ];
@@ -77,9 +79,6 @@
                             try {
                                 settings[KAStorage.featureKey(mod.id)] = checkbox.checked === true;
                                 chrome.storage.local.set({ ka_settings: settings });
-                                if (mod.id === 'feature_TrackerBlocker') {
-                                    chrome.runtime.sendMessage({ action: 'updateTrackerBlocker', enabled: checkbox.checked === true });
-                                }
                                 window.location.reload();
                             } catch (e) {
                                 console.error('[KA InPageMenu] Fehler beim Speichern:', e);

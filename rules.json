@@ -10,7 +10,8 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest",
-        "sub_frame"
+        "sub_frame",
+        "ping"
       ]
     }
   },
@@ -24,7 +25,8 @@
       "urlFilter": "theadex.com",
       "resourceTypes": [
         "script",
-        "xmlhttprequest"
+        "xmlhttprequest",
+        "ping"
       ]
     }
   },
@@ -38,7 +40,8 @@
       "urlFilter": "clarity.ms",
       "resourceTypes": [
         "script",
-        "xmlhttprequest"
+        "xmlhttprequest",
+        "ping"
       ]
     }
   },
@@ -53,7 +56,8 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest",
-        "sub_frame"
+        "sub_frame",
+        "ping"
       ]
     }
   },
@@ -68,7 +72,8 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest",
-        "sub_frame"
+        "sub_frame",
+        "ping"
       ]
     }
   },
@@ -81,7 +86,8 @@
     "condition": {
       "urlFilter": "bing.com",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -95,7 +101,8 @@
       "urlFilter": "facebook.net",
       "resourceTypes": [
         "script",
-        "sub_frame"
+        "sub_frame",
+        "ping"
       ]
     }
   },
@@ -109,7 +116,8 @@
       "urlFilter": "creativecdn.com",
       "resourceTypes": [
         "script",
-        "xmlhttprequest"
+        "xmlhttprequest",
+        "ping"
       ]
     }
   },
@@ -124,7 +132,8 @@
       "resourceTypes": [
         "script",
         "xmlhttprequest",
-        "sub_frame"
+        "sub_frame",
+        "ping"
       ]
     }
   },
@@ -138,7 +147,8 @@
       "urlFilter": "google.com/adsense",
       "resourceTypes": [
         "script",
-        "xmlhttprequest"
+        "xmlhttprequest",
+        "ping"
       ]
     }
   },
@@ -151,7 +161,8 @@
     "condition": {
       "urlFilter": "amazon-adsystem.com",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -164,7 +175,8 @@
     "condition": {
       "urlFilter": "fastclick.net",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -178,7 +190,8 @@
       "urlFilter": "id5-sync.com",
       "resourceTypes": [
         "script",
-        "xmlhttprequest"
+        "xmlhttprequest",
+        "ping"
       ]
     }
   },
@@ -191,7 +204,8 @@
     "condition": {
       "urlFilter": "advertisingWebRenderer",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -204,7 +218,8 @@
     "condition": {
       "urlFilter": "prebid.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -217,7 +232,8 @@
     "condition": {
       "urlFilter": "liberty.min.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -230,7 +246,8 @@
     "condition": {
       "urlFilter": "GATrackingDispatcher",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -243,7 +260,8 @@
     "condition": {
       "urlFilter": "GoogleAnalyticsTags",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -256,7 +274,8 @@
     "condition": {
       "urlFilter": "gtag/js",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -269,7 +288,8 @@
     "condition": {
       "urlFilter": "gtm.js",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -282,7 +302,8 @@
     "condition": {
       "urlFilter": "privacymanager.io",
       "resourceTypes": [
-        "script"
+        "script",
+        "ping"
       ]
     }
   },
@@ -589,6 +610,176 @@
         "sub_frame",
         "image",
         "ping"
+      ]
+    }
+  },
+  {
+    "id": 40,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "adform.net",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 41,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "smartadserver.com",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 42,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "openx.net",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 43,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "bidswitch.net",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 44,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "googleadservices.com",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 45,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "2mdn.net",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 46,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "ay.delivery",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 47,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "appboycdn.com",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 48,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "indexww.com",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
+      ]
+    }
+  },
+  {
+    "id": 49,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "sgtm-legacy.kleinanzeigen.de",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "sub_frame",
+        "ping",
+        "image"
       ]
     }
   }
