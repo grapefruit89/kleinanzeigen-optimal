@@ -76,10 +76,16 @@
                         item.className = 'ka-module-item';
                         item.innerHTML = '<div class="ka-module-info"><h3>' + mod.name + '</h3><p>' + mod.desc + '</p></div><label class="ka-switch"><input type="checkbox" id="ka-ui-' + mod.id + '" ' + (isEnabled ? 'checked' : '') + '><span class="ka-slider"></span></label>';
                         const checkbox = item.querySelector('#ka-ui-' + mod.id);
-                        checkbox.addEventListener('change', () => {
+                        checkbox.addEventListener('change', async () => {
                             try {
-                                settings[KAStorage.featureKey(mod.id)] = checkbox.checked === true;
-                                chrome.storage.local.set({ ka_settings: settings });
+                                // Frisch lesen, NICHT das Sidebar-Öffnungs-Snapshot-
+                                // Objekt zurueckschreiben (stale Read-Modify-Write:
+                                // zwischendurch gesetzte Flags -- z.B. via SidePanel
+                                // oder SW -- wurden dabei weggeschmissen,
+                                // 09.09.2026 AdRecorder+CleanHomepage verloren).
+                                const fresh = await chrome.storage.local.get(['ka_settings']).then((r) => r.ka_settings || {});
+                                fresh[KAStorage.featureKey(mod.id)] = checkbox.checked === true;
+                                await chrome.storage.local.set({ ka_settings: fresh });
                                 window.location.reload();
                             } catch (e) {
                                 console.error('[KA InPageMenu] Fehler beim Speichern:', e);

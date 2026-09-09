@@ -22,3 +22,19 @@ liegen in **GEMINI.md** — lies sie zuerst, insbesondere:
   nur die Antwort kommt ins Hauptfenster.
 - Direkte `websearch`/`webfetch`-Calls im Hauptkontext sind die Ausnahme und brauchen
   einen Grund (z. B. einzelner bekannter URL-Statuscheck).
+
+## System-Level-Änderungen (HEIKLE SACHEN)
+
+- **Backup-Pflicht:** Bevor irgendeine Datei außerhalb dieses Repos angefasst wird
+  (Konfigs wie `kdeglobals`, `kwinrc`, `plasma-*.desktop-appletsrc`, systemd-Units,
+  Passwörter-Dateien etc.): erst Voll-Kopie in ein Backup-Verzeichnis mit Zeitstempel
+  anlegen, `sync` ausführen, dann erst editieren. Am Ende die Originaldatei gegen das
+  Backup diffen und dem User zeigen, was geändert wurde.
+- **Minimale Diffs:** Nur die Zeile(n) ändern, die nötig sind — nie ganze Blöcke oder
+  Dateien neu schreiben. Einzeilige Additive > Umbauten.
+- **User-Zustimmung vor destruktiven Aktionen** (Neustart, Logout, `pkill`, Config-
+  Zurücksetzen): immer erst Folgen erklären und explizites Go abwarten.
+- **Lesson learned (2026-09-09):** Ein einzeiliger Config-Fix ohne vorheriges Backup
+  kippte eine Plasma-Session (Vesktop-Crash + wedged Wayland-Compositor als Kette).
+  Ergebnis: Backups + Reparatur-Script + Nachweis-Checks (Journals, Config-Valide-
+  rung) sind Pflicht, bevor Änderungen an laufenden Desktop-Diensten gemacht werden.

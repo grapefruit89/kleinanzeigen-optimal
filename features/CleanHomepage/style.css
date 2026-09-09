@@ -1,15 +1,25 @@
 /* Startseite: Kategorien, Feature-Angebote und ähnliche Inhaltsblöcke ausblenden */
-/* 29.08.2026 live gefunden: #feature-offer-section existiert nicht mehr (0 Treffer) --
-   diese Regel war komplett wirkungslos. Neuer Anker: die Kategorien-Box hat zwar
-   selbst keine stabile ID mehr, aber ihre Überschrift traegt weiterhin
-   #sidebar-category-heading -- darüber per :has() die umschließende <section> treffen,
-   das ist robuster als ein Tailwind-Klassenname. */
-body.ka-feature-cleanhomepage section:has(#sidebar-category-heading) {
-    display: none !important;
-}
+/* Kategorien-Seitenleiste: bewusst NICHT mehr ausblenden (09.09.2026) --
+   User-Nutzung: die Kategorien sind die Hauptnavigation der Startseite.
+   Die alte #sidebar-category-heading-Regel war drin, wurde mit dem
+   Feature-Einschalten aktiv und blies die Seitenleiste weg -> gestrichen. */
 
 /* "Feedback geben" Astro-Island ausblenden -- 29.08.2026 live bestaetigt: existiert
    weiterhin unveraendert (20 Treffer auf der Startseite). */
 body.ka-feature-cleanhomepage li:has(astro-island[component-url*="FeedItemTile"]) {
+    display: none !important;
+}
+
+/* "Galerie"-Sektion (kuratierte Anzeigen) -- 09.09.2026 live verifiziert:
+   <section class="bg-surface mb-large rounded-xsmall p-small"> mit genau einem
+   astro-island[component-export="Gallery"] (Header "Galerie", 264px hoch).
+   Anchor ist der Astro-Island-Export-Name, nicht die Tailwind-Klassen. */
+body.ka-feature-cleanhomepage section:has(astro-island[component-export="Gallery"]) {
+    display: none !important;
+}
+
+/* JS-Text-Sweep (index.js): h2-Text-Anker ("Fuer dich empfohlen",
+   "Unternehmensseiten in Deutschland") setzen ka-ch-block-hidden. */
+body.ka-feature-cleanhomepage .ka-ch-block-hidden {
     display: none !important;
 }

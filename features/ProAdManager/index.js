@@ -8,6 +8,11 @@
 //   Karten: article[data-adid], Wrapper-<li> via closest('li')
 //   Filler: li:has(div[id^="srpb-result-list"]|.liberty-hide-unfilled|
 //           div[id^="google_ads_iframe"])
+//   Liberty-Slots generisch (09.09.2026): div[data-liberty-position-name] =
+//   immer ein Ad-Container (home-billboard 250px-Luecke auf der Homepage,
+//   Sky-Scraper, srpb) -> style.css blendet sie klassenlos aus. Der div ist
+//   clientseitig injiziert (SSR hat nur Sky), deshalb reine CSS-Regel statt
+//   Sweep-Klassen.
 //   TOP-Badge: Leaf mit Text "TOP" in der Karte (Wrapper: flex-row gap-
 //              xxsmall, live verifiziert via BadgeRemover-Audit)
 //   PRO-Badge: Leaf mit Text "PRO" in der Karte ODER a[href^="/pro/"]
@@ -16,7 +21,7 @@
 //   article[data-adid] als Startpunkt nehmen.
 // WORKS WHEN:
 //   Keine grauen Luecken und keine TOP/PRO-kitschierten Karten mehr in der
-//   Ergebnisliste.
+//   Ergebnisliste, keine home-billboard-Luecke auf der Homepage.
 // BROKEN IF:
 //   Graue Luecken bleiben sichtbar (neuer Filler-Selector -> erweitern) ODER
 //   regulare Anzeigen verschwinden (Badge-Erkennung zu breit -> text-

@@ -13,6 +13,15 @@ body.ka-feature-proadmanager li.ka-pad-filler-hidden {
     display: none !important;
 }
 
+/* Liberty-Ad-Slots generisch: JEDES div[data-liberty-position-name] ist ein
+   Werbe-Container (Filler li auf Suchseiten, home-billboard auf der Home-
+   page, Sky-Scraper). 09.09.2026: home-billboard renderte eine 250px-Luecke
+   auf der Homepage, weil die Filler-Regel nur li-umspannte Suchlisten-Slots
+   traf und der Alt-Anker in UiCleaner (Opt-in) lag. Jetzt Felsen: immer weg. */
+body.ka-feature-proadmanager div[data-liberty-position-name] {
+    display: none !important;
+}
+
 body.ka-feature-proadmanager li.ka-pro-hidden {
     display: none !important;
 }
