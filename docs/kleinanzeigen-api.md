@@ -261,6 +261,41 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
   (noch zu verifizieren).
 - **Monitoring-Mode:** Baseline-Dedup + contentHash; kleinanzeigen-agent.de
   zeigt die Nachfrage nach Webhooks bei neuen Inseraten.
+
+## 9. ROADMAP: SidePanel als Zentrale (naechster grosser Step)
+
+Quelle: https://developer.chrome.com/docs/extensions/reference/api/sidePanel
+Die heutige Extension verteilt UI ueber die Seite (Floating-Widgets: AdRecorder,
+DataExport-Box, RentalAnalyzer-Dashboard, HighRes-Overlay, InPageMenu-Sidebar).
+Das SidePanel-API (MV3, `chrome.sidePanel`) gibt uns eine **dauerhafte,
+an-/abschaltbare Chrome-Spalte** neben jeder KA-Seite — die natuerliche
+Zentrale fuer alles, was heute verteilt sitzt:
+
+| In das Panel wandert | Gewinn |
+|---|---|
+| **RentalAnalyzer-Dashboard** (IQR-Stats, PLZ-Matrix, CSV-Export) | Bleibt sichtbar beim Blättern/Seitenwechsel statt oberhalb der Liste neu zu injizieren; klickt in Matrizen + filtert Karten (postMessage/Storage-Bridge) |
+| **AdRecorder** (REC-Status, Sammel-Liste, Seller-Check, Download) | Panel überlebt Seitenwechsel — Aufnahme läuft "begleitend", statt Widget pro Seite neu |
+| **DataExport** (Limits, Fortschritt, Ergebnis-Preview) | Stop/Start/Fortschritt ohne DOM-Widget in der Ergebnisliste |
+| **rental_db-Ansicht** (Einträge, DB-Hygiene, Export) | Persistente DB-Verwaltung ohne confirm()-Reload |
+| **Feature-Schalter** (ersetzt InPageMenu/Popup) | EIN Ort für Opt-ins; Felsen (TrackerBlocker/BadgeRemover/ProAdManager) als gesperrte Zeilen angezeigt |
+
+Technischer Weg:
+- `manifest.json`: `"sidePanel": true` (Permission) + `side_panel.default_path`
+- `background.js`: `chrome.sidePanel.setPanelBehavior({openPanelOnActionClick: true})`
+  — der Toolbar-Button öffnet dann das Panel statt des Popups (Popup kann entfallen)
+- `sidepanel/panel.html+js`: rendert aus `chrome.storage.local` (rental_db,
+  ka_recorder, ka_settings) — **kein DOM-Injection-Problem, kein Isolated-World-
+  Kontext-Tod**: Das Panel lebt in der Extension, nicht auf der Seite
+- Seite↔Panel-Bridge: vorhandener `chrome.storage`-Fluss reicht (rental_db wird
+  ohnehin persistiert); für Live-Events eine `chrome.runtime.sendMessage`-Linie
+
+Warum dies der naechste grosse Step ist:
+1. **Kontext-Tod adé** — das heutige Taeglichkeitsthema (Content-Script-Kontext
+   nach Extension-Reload invalidiert) trifft Panel-UI nicht: Panels sind
+   extension-owned
+2. Aufnahme + Analyse laufen seitenunabhaengig — passt zum Monitoring-Mode (§7)
+3. Layout-Drift immun: Panels sind Extension-UI, keine injected widgets mehr
+4. InPageMenu-Sidebar (heute document_start-Fix) kann retired werden
 - **MCP-Tool-Parität erreicht (2026-09-09):** Alle 10 Tools des bezahlten
   kleinanzeigen-agent-MCP-Servers (kleinanzeigen-agent.de/mcp) sind in der
   Extension abgedeckt — search (KAApi.search), get_ad/status+views (getAd/
@@ -270,18 +305,123 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
   Rate-Discipline; deren Seite: 1–2 Credits/Call. Die 5 Referenz-Endpunkte
   (categories, metadata, search-metadata, top-locations, locations/{id})
   wurden live gegen die CAPI verifiziert (alle HTTP 200).
-- **KI-Bridge — kein externer Server nötig (2026-09-09 recherchiert):**
-  Chrome DevTools MCP (offiziell, stabil seit Chrome 149) + **WebMCP**
+- **KI-Bridge — kein externer Server nötig (2026-09-09 recherchiert, 2026-09-09
+  korrigiert):** Chrome DevTools MCP (offiziell, stabil seit Chrome 149) + **WebMCP**
   (proposed standard, Chromium 149+ Origin Trial, Flag `#enable-webmcp-testing`)
-  lösen das "Extension als Tool-Anbieter für Agenten"-Problem auf Standard-
-  Weg: Die Extension kann WebMCP-Tool-Registrierungen in die KA-Seite
-  injizieren (`navigator.modelContext`, origin-isolated, Permissions-Policy
-  `tools`) — Agenten rufen dann `ka_get_ad`/`ka_seller_profile`/… nativ über
-  die Browser-Session auf, die Extension bridged zur CAPI. Helium (Chromium
-  151): WebMCP-API aktuell nicht aktiv (Probe: `navigator.modelContext`
-  undefined) — Aktivierung über Flag oder Origin-Trial. Bis dahin gilt:
-  CDP-direkter Zugriff auf den Extension-Service-Worker funktioniert bereits
-  (Debug-Port 9222).
+  lösen das "Extension als Tool-Anbieter für Agenten"-Problem — aber mit
+  **entscheidender Einschränkung**: WebMCP-Tools sind **nur für browser-interne
+  Agenten** sichtbar (Gemini in Chrome, Inspector-Extension) — es gibt **keinen
+  externen Transport**, opencode/CDP sieht diese Tools NICHT (Doku: WebMCP
+  "omits server-side concepts"). Korrektur zur API: heißt
+  **`document.modelContext`** (nicht `navigator.modelContext` — unsere erste
+  Helium-Probe prüfte das falsche Objekt!):
+  `document.modelContext.registerTool({name, description, inputSchema, execute,
+  annotations}, {exposedTo?, signal?})`, Discovery `getTools({fromOrigins?})`,
+  `executeTool`, `toolchange`-Event. Gated auf origin-isolated Docs + Permissions-
+  Policy `tools` (default `self`). Konsum aus Content-Scripts ist dokumentiert
+  ("extensions can query and execute WebMCP tools"); ob REGISTRIERUNG aus der
+  isolated world geht (vs. MAIN-World-Injection): unklar → live testen. Security
+  (secure-tools): keine per-Tool-Prompts, sondern Annotation-Hints —
+  `readOnlyHint`, `untrustedContentHint` (Prompt-Injection-Gegenmittel),
+  `consequentialHint: true` = User-Confirmation erzwingen; Character-Budgets
+  (Name ≤30, Description ≤500, Output ≤1.5k). Status: Origin Trial (nicht
+  stabil), Registrierung ohne AbortCancel-Fix erst ab Chrome 153 — Helium 151
+  ist auf OT-Stand. **Fazit: komplementär, kein Ersatz für McpBridge v2** —
+  unser WS↔MCP-Adapter bleibt der Pfad für opencode; WebMCP erst wenn OT
+  stabil ist. Nächste Schritte: 1) Helium: `typeof document.modelContext` prüfen
+  (Flag `#enable-webmcp-testing`), 2) Mini-PoC `ka_search`-Tool (MAIN- vs.
+  isolated-world-Test) via Inspector-Extension, 3) McpBridge v2 unabhängig bauen.
+
+### ROADMAP: McpBridge v2 — echter MCP-Server für Agent-Anbindung (2026-09-09, recherchiert)
+
+Vision (User): die laufende Extension öffnet per Menüeintrag (`feature_McpBridge`) einen
+lokalen Endpunkt, an dem sich Coding-Agents (opencode & Co.) verbinden und Kleinanzeigen
+nutzen können — statt nur `get_html`-Rohdaten.
+
+Stand heute (`features/McpBridge/index.js`):
+- Extension = WS-Client zu `ws://127.0.0.1:8765`, Token-Auth pro Message
+  (`ka_settings.mcp_bridge_token`), Auto-Reconnect 5 s; Toggle im InPageMenu
+- EINE Action: `get_html` (outerHTML der offenen Seite) — keine Suche/Details/Profile
+- eigenes Mini-Protokoll, **kein MCP/JSON-RPC** → ein MCP-Client kann nicht direkt verbinden
+
+Zielbild (MCP-kompatibel, nach und nach abarbeiten):
+1. **JSON-RPC 2.0 über den WS**: `initialize` / `tools/list` / `tools/call` (MCP-Kern)
+2. **Tool-Set anlehnend an Sprayer115/ebay-kleinanzeigen-api-mcp** (MIT): `search_listings`
+   (query/location/radius/min-max_price/page) + `get_listing_details` (title, status
+   active/sold/reserved/deleted, price, views, images, seller) — **plus unsere KAApi-
+   Parität** (sellerProfile, sellerAds, categories, locations), die der Fork nicht hat
+3. **Datenquelle bleibt die CAPI** (KAApi), nicht Playwright-Scraping wie der Fork
+   (serverseitiger Headless-Browser ist unser Gegenmodell — unser realer Browser + API
+   ist robuster gegen Bot-Detection)
+4. **Transport**: für Agent-Anbindung fehlt noch ein WS↔MCP-Adapter. Option A: kleiner
+   lokaler Adapter-Prozess (WS ↔ stdio-MCP), eintragbar in opencode.json `mcp{}` —
+   Option B: WebMCP (siehe oben) sobald Chromium/Helium ihn aktiviert
+5. **Härtung**: Token-Bindung an 127.0.0.1 bleibt; Token NICHT mehr per console.log
+   ausgeben (heutiger Leak in `index.js:25`); `ws.close()` bei Unload
+6. Status-Erkennung (sold/reserved/deleted): bei uns über CAPI `ad-status`-Feld statt
+   DOM-Badge-Heuristik (Referenz: Sprayer115-`types.py`)
+
+### ROADMAP: Manifest-Umbau (2026-09-09, offizielle Manifest-Referenz geprüft)
+
+**Sofort-Wins (jeweils 1 Zeile im `manifest.json`):**
+1. `"permissions": ["unlimitedStorage"]` — hebt die ~10MB-`storage.local`-Quota auf.
+   Größter Speicher-Hebel für `ka_recorder` (300 Full-Ads ohne Räumung) + `rental_db`.
+2. `"permissions": ["alarms"]` — TTL-Cleanup (z. B. `ka_recorder` 7 Tage nach Download,
+   `ka_enrich_cache`-Ablauf) im Service-Worker per `chrome.alarms`; der SW stirbt nach
+   ~30 s, Alarms wecken ihn zuverlässig — kein Content-Script nötig.
+3. `"permissions": ["downloads"]` — `chrome.downloads.download()` statt Blob+a.click
+   in AdRecorder/DataExport (Ponytail-Stufe 4: Plattform-Feature statt Eigenbau).
+
+**Geplant (mit SidePanel-Umbau, siehe oben):**
+- `"sidePanel"`-Permission + `"side_panel": {"default_path": ...}`; `action.default_popup`
+  entfällt dann (Toolbar-Button öffnet Panel via `setPanelBehavior`).
+- `"commands"` — Keyboard-Shortcut zum Panel-Öffnen (`sidePanel.open()` zählt als
+  User-Geste).
+- `"minimum_chrome_version": "151"` — schützt vor älteren Chromiums (sidePanel-APIs).
+
+**Bewusst NICHT:**
+- `declarativeNetRequestWithFeedback` — Debug-only (unpacked), produktiv weglassen.
+- `web_accessible_resources` — haben wir nicht, Content-Scripts brauchen es nicht; falls
+  je nötig: nur Origin-exakt + `use_dynamic_url` (Fingerprinting-Angriffsfläche).
+- `content_security_policy`-Key — MV3-Default erlaubt WS zu 127.0.0.1 (McpBridge läuft);
+  nur bei bewusster Härtung setzen.
+- `default_locale` — nur Pflicht mit `_locales/`-Struktur; ohne i18n = Ladefehler.
+- `externally_connectable` — Bridge ist WS-Client im SW, keine externe Kommunikation.
+
+Quellen: developer.chrome.com/docs/extensions/reference/manifest (+ /storage,
++ /web-accessible-resources, + /api/sidePanel, + /permissions-list).
+
+### ROADMAP: Token-Effizienz-Design für McpBridge-v2-Tools (2026-09-09, recherchiert)
+
+Vorlage 1: **chrome-devtools-mcp** (offizielles Google-Tool, Apache-2.0, Puppeteer,
+stdio, `--browserUrl http://127.0.0.1:9222` = CDP-attach gegen Helium möglich —
+Extension-Kategorie-Tools funktionieren aber NICHT im attach-Modus). Vorlage 2:
+**justbetter-mcp** (MIT) — löst Input-Bloat (semantische Tool-Retrieval, advertised-
+Cap, `batch_call`), aber NICHT Output-Bloat; bei unseren 3–6 Tools kein Problem.
+Die übernehmbaren Techniken sind alle im **Output**:
+
+1. **`format`-Parameter statt Voll-Dump** — unser heutiges `get_html`
+   (`documentElement.outerHTML`) ist der teuerste mögliche Response. Neu:
+   `get_page({format: "snapshot"|"text"|"html"})`, default `snapshot`
+   (A11y-Text-Snapshot mit uid-Anchors, Muster: chrome-devtools-mcp `take_snapshot`).
+2. **`fields`-Selektor pro Tool** (unser `_in`-Muster aus der CAPI, gedreht zum
+   Client): `ka_search(fields=["id","price","title","plz"])` — Detail-Objekte
+   nur in `ka_get_ad` (List-vs-Detail-Split, den wir ohnehin fahren).
+3. **Truncation + Continue-Handle** für Beschreibungen:
+   `description (500 chars) + description_truncated: true + next_offset`.
+4. **Pagination überall auf Listen**: `pageIdx`/`pageSize` (Muster:
+   `list_network_requests` bei chrome-devtools-mcp) — gilt für ka_search,
+   sellerAds, rental_db-Views.
+5. **`batch_call`** (justbetter-mcp): „Suche + 3 Ads + Seller-Profile" in EINEM
+   Round-Trip statt 3 Turns — biggest Turn-Overhead-Sparer.
+6. **Filter-Parameter statt Vorfilter-Nacharbeit**: `resourceTypes`-Art-Filter +
+   `includeSnapshot=false` per Default (opt-in, chrome-devtools-mcp-Muster).
+7. **Character-Budgets als Tool-Contract** (WebMCP-Empfehlung, siehe oben):
+   Name ≤30, Description ≤500, Output-Teaser ≤1.5k Tokens.
+8. Nebeneffekt: chrome-devtools-mcp taugt JETZT als Debug-Werkzeug für die
+   Extension (SW-Console via `serviceWorkerId`-Filter, Network-Inspektion der
+   CAPI-Calls) — dreht die McpBridge-Frage um: erst debuggen damit, dann
+   selbst server sein.
 
 ## 8. Quellen
 
@@ -295,6 +435,22 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
 | **Plus** (cgailbbhhcmdglfanagajfjffdmbcfoi, 1.0.2) | Karte + Datum-Toggle | `#street-address`-Anker (Straße im DOM), Maps-Embed aus PLZ+Straße |
 | **Bild-Viewer** (cbpmpfinkejojdnhndpgofocindnmejn, 2.0) | Zip-Download aller Bilder | Trivial (background.js Stub) — unsere API `pictures[]` ist besser |
 | **Filter** (bekmapfnlkhaeopdmhglkanoobnglbhf, 1.0.6) | r-unruh/kleinanzeigen-filter | siehe Quellen oben (TOP-SVG-Glyph etc.) |
+
+### Prioritäts-Verdicts je Extension (2026-09-09, nichts blind übernommen)
+
+- **Buddy** → **P2** (der einzige mit echtem Neuwert): Seller-Rating/Alter an Karten
+  haben wir via CAPI (besser); Notizen/Ausblenden wären reines UI, aber nicht gefragt.
+  Abschau-Kandidat bleibt nur das **KbAnchors-Pattern** (inhalt-basierte Anker +
+  `diagnose()`-Routine) — als Härtung für unsere Header-Doku-Methik, nicht als Feature.
+- **für Immos** → **erledigt/keine Priorität**: BelenConf-Technik ist bereits
+  übernommen (§3c, RentalAnalyzer `detail.js`); Rest des Features ist unser€/m²-Verschnitt.
+- **Plus** → **abgelehnt (AP-17, keine Priorität)**: `#street-address`-Anker +
+  Maps-Embed aus PLZ+Straße. User-Mandat 2026-09-09: **keine Maps** — weder als
+  Feature noch als Schmankerl. GPS aus der CAPI (§3) deckt den Informationsbedarf.
+- **Filter** (r-unruh) → **erledigt/keine Priorität**: DOM-Knowledge (TOP-SVG-Glyph,
+  data-href/stopPropagation, Hydration-Muster) ist längst in WasdNavigation/
+  ProAdManager/BadgeRemover aufgegangen. Filterlogik selbst: kein Bedarf — wir
+  analysieren statt wegzufiltern.
 
 ### Code-/Doku-Quellen
 
@@ -320,13 +476,23 @@ weil lokal im eigenen Browser; nicht ungefiltert weiterverbreiten.)
   extend (8-Tage-Fenster, hält Watchlist + Monatskontingent)/**reserve+activate**
   (Anzeige aus Suche nehmen, ID/Alter/Views/Watchlist bleiben!)/**content_hash**
   (Change-Detection vor Republish — exakt unser Monitoring-Dedup-Muster),
-  Shipping-Options-Inference aus öffentlichem Zustand, workspace-portable/
-  XDG-Modes. Eigenes-Konto-Automation ist der legitime Pfad (ToS-Disclaimer
-  inklusive). "Related projects"-Liste ist ein kleines Ökosystem-Verzeichnis
-  (Discord/Telegram-Watcher, SQL-Scraper, Feinanzeigen-Extension, Kleingäck-Backup)
+   Shipping-Options-Inference aus öffentlichem Zustand, workspace-portable/
+   XDG-Modes. Eigenes-Konto-Automation ist der legitime Pfad (ToS-Disclaimer
+   inklusive). "Related projects"-Liste ist ein kleines Ökosystem-Verzeichnis
+   (Discord/Telegram-Watcher, SQL-Scraper, Feinanzeigen-Extension, Kleingäck-Backup)
+   — **nutzbar für uns: `categories.yaml`** (Kategorie-ID-Mapping, z. B. Verleihen
+   272/274) als Referenz für unsere `categoryOf()`-Logik; CAPTCHA-Erfahrung
+   (auto_restart + Delay) und Chrome-136+-CDP-Hinweis (`--user-data-dir` nötig)
+   bestätigen unsere Helium-Debug-Praxis
 - github.com/DanielWTE/ebay-kleinanzeigen-api (MIT, 219★) — Playwright-Fall-
   back-Muster, Redirect=gelöscht-Erkennung, Seller-Extraktion, eigene FastAPI-
   Schnittstelle über der Seite
+- github.com/Sprayer115/ebay-kleinanzeigen-api-mcp (MIT, 5★, aktiv Jul 2026) —
+  Fork/Rewrite von DanielWTE als **echter MCP-Server** (FastMCP: stdio + SSE mit
+  Bearer-Key), Playwright-Scraping statt API; exponiert nur `search_listings` +
+  `get_listing_details` (inkl. Status active/sold/reserved/deleted). Für uns:
+  Tool-Schemata + Typen (`types.py`) als Vorbild für McpBridge-v2-Roadmap (§9) —
+  Datenweg (Headless-Browser) bewusst NICHT übernommen, unsere CAPI-Route ist besser
 - github.com/r-unruh/kleinanzeigen-filter (MIT) — DOM-Knowledge 2026:
   A/B-getestete Layouts (h2 a/h2/h3 a/h3, browsebox-Form-Doppel), TOP-SVG-
   Glyph (`path[d^="M8.168 13H9.62"]`), `waitForElement`-Hydration-Muster,
