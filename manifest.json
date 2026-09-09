@@ -5,6 +5,9 @@
   "description": "Modulares Analyse-Tool & UI-Verbesserungen fuer Kleinanzeigen.de",
   "permissions": [
     "storage",
+    "unlimitedStorage",
+    "alarms",
+    "downloads",
     "activeTab",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback"

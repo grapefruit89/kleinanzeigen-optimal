@@ -28,7 +28,11 @@
 //   ODER Aufnahme stoppt beim normalen Seitenwechsel (Basis-URL-Vergleich
 //   zu streng: sortierung:*-Segmente sind Teil derselben Suche).
 
-(() => {
+// BUGFIX 2026-09-09 (Nutzer-Fund): Das Feature steht als opt-in in den
+// Menueeintraegen, lief aber als hartes IIFE UNBEDINGT -- mit ausgeschaltetem
+// Flag zeigte das Widget trotzdem weiter "308 Anzeigen bereit". Jetzt korrekt
+// ueber den FeatureManager registriert: Flag aus = kein Widget.
+KAFeatureManager.register('AdRecorder', () => {
     // Die Module laufen im selben Isolated-World; Storage/KAApi kommen aus
     // core/Storage.js + core/kaApi.js (Manifest-Reihenfolge garantiert das).
     if (typeof KAStorage === 'undefined' || typeof KAApi === 'undefined') return;
@@ -103,13 +107,21 @@
         };
     }
 
-    function download(state) {
+    async function download(state) {
         const blob = new Blob([JSON.stringify(buildExport(state), null, 2)], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
         const slug = (state.searchBase.match(/^\/s-([a-z0-9-]+)/i) || [null, 'suche'])[1];
+        const filename = `KA_Recording_${slug}_${new Date().toISOString().slice(0, 10)}.json`;
+        // Plattform-Weg (Ponytail Stufe 4): chrome.downloads via SW-Bridge.
+        // Fallback a.click() falls die Bridge den Blob-URL nicht aufloesen
+        // kann (Blob ist origin-gebunden an die Seite, nicht an die Extension).
+        try {
+            const resp = await chrome.runtime.sendMessage({ action: 'kaDownload', url, filename });
+            if (resp && resp.ok) { URL.revokeObjectURL(url); return; }
+        } catch (e) { /* auf Fallback durchfallen */ }
+        const a = document.createElement('a');
         a.href = url;
-        a.download = `KA_Recording_${slug}_${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -301,4 +313,4 @@
     if (/^\/s-/.test(window.location.pathname)) {
         onSearchPage();
     }
-})();
+});

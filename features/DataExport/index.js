@@ -457,13 +457,19 @@ KAFeatureManager.register('DataExport', async () => {
         return 'suche';
     }
 
-    function exportJsonl() {
+    async function exportJsonl() {
         const filename = sanitizeFilename(`KA_Export_${guessExportName()}`);
 
         const jsonlOutput = state.allAds.map(obj => JSON.stringify(obj)).join('\n');
 
         const blob = new Blob([jsonlOutput], { type: 'application/jsonl;charset=utf-8' });
         const url = URL.createObjectURL(blob);
+        // Plattform-Weg (Ponytail Stufe 4): chrome.downloads via SW-Bridge,
+        // a.click()-Fallback falls die Bridge den Blob-URL nicht aufloesen kann.
+        try {
+            const resp = await chrome.runtime.sendMessage({ action: 'kaDownload', url, filename: `${filename}.jsonl` });
+            if (resp && resp.ok) { URL.revokeObjectURL(url); return; }
+        } catch (e) { /* auf Fallback durchfallen */ }
         const a = document.createElement('a');
         a.href = url;
         a.download = `${filename}.jsonl`;

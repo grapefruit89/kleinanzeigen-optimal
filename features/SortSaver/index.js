@@ -23,6 +23,53 @@ KAFeatureManager.register('SortSaver', () => {
     };
     const KNOWN_SEGMENTS = new Set(['neuste', 'preis', 'teuerste']);
 
+    // i18n-feste Anker (2026-09-09 Upgrade): Das SortingControls-Astro-Island
+    // legt die Optionen als WERTE offen -- Labels koennen sich aendern ("Preis
+    // aufsteigend"), die Werte sind der API-Kontext (SORTING_DATE = der
+    // sortType der Mobile-API). Reihenfolge der Suffixe: _DESC = teuerste.
+    const VALUE_TO_SEGMENT = {
+        'RECOMMENDED': null,
+        'SORTING_DATE': 'neuste',
+        'PRICE_AMOUNT': 'preis',
+        'PRICE_AMOUNT_DESC': 'teuerste',
+    };
+
+    // Astro-Props dekodieren (gleiche Serialisierung wie resultAds, siehe
+    // docs/kleinanzeigen-api.md §3) -> availableOptions [{value, text}]
+    function islandOptions() {
+        try {
+            const sc = document.querySelector('astro-island[component-url*="SortingControls"]');
+            if (!sc || !sc.getAttribute('props')) return null;
+            const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+            const dec = (n) => {
+                if (Array.isArray(n)) {
+                    const [t, v] = n;
+                    if (t === 0) return dec(v);
+                    if (t === 1) return v.map(dec);
+                    if (t === 2 || t === 3) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, dec(x)]));
+                    return v;
+                }
+                if (n && typeof n === 'object') return Object.fromEntries(Object.entries(n).map(([k, x]) => [k, dec(x)]));
+                return n;
+            };
+            const props = dec(JSON.parse(unesc(sc.getAttribute('props'))));
+            return Array.isArray(props.availableOptions) ? props.availableOptions : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Label -> Segment: ZUERST ueber die Island-Werte (drift-fest), Label-Map
+    // bleibt als Fallback falls das Island fehlt/erweitert wird.
+    function labelToSegment(label) {
+        const opts = islandOptions();
+        if (opts) {
+            const hit = opts.find(o => o && o.text === label);
+            if (hit && hit.value in VALUE_TO_SEGMENT) return VALUE_TO_SEGMENT[hit.value];
+        }
+        return (label in LABEL_TO_SEGMENT) ? LABEL_TO_SEGMENT[label] : undefined;
+    }
+
     function extractSegment(url) {
         const m = url.match(/\/sortierung:([a-zA-Z]+)\//);
         return m ? m[1] : null;
@@ -46,8 +93,8 @@ KAFeatureManager.register('SortSaver', () => {
     }
 
     async function onUserPickedOption(label) {
-        if (!(label in LABEL_TO_SEGMENT)) return;
-        const segment = LABEL_TO_SEGMENT[label];
+        const segment = labelToSegment(label);
+        if (segment === undefined) return; // unbekannte Option: nicht raten
         try {
             await KAStorage.set(SORT_STORAGE_KEY, segment);
             console.log('[KA SortSaver] Manuelle Sortierung gespeichert:', segment || '(Empfohlen)');

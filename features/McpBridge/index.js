@@ -21,8 +21,9 @@ KAFeatureManager.register('McpBridge', () => {
         bridgeToken = randomToken();
         settings.mcp_bridge_token = bridgeToken;
         await KAStorage.set('ka_settings', settings);
-        console.warn('[KA MCP Bridge] Neues Token erzeugt. Der lokale Client muss token mitsenden.');
-        console.warn('[KA MCP Bridge] token=' + bridgeToken);
+        // P0-Härtung (2026-09-09): Token NICHT per console.log ausgeben
+        // (Leak) -- abholbar im InPageMenu-Eintrag via "Token kopieren".
+        console.warn('[KA MCP Bridge] Neues Token erzeugt. Abholbar im KA-Settings-Menue (Token kopieren).');
     }
 
     function connect() {
@@ -85,6 +86,13 @@ KAFeatureManager.register('McpBridge', () => {
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, 5000);
     }
+
+    // P0-Härtung (2026-09-09): Bei Seiten-Unload Verbindung ordentlich
+    // schliessen + Reconnect-Timer stoppen (keine Zombie-Verbindungen).
+    window.addEventListener('beforeunload', () => {
+        clearTimeout(reconnectTimer);
+        try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+    });
 
     loadToken().then(connect);
 });

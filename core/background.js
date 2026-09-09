@@ -149,7 +149,63 @@ function kaApiQueued(path, params, maxRetries) {
     return run;
 }
 
+// ------------------------------------------------------------------
+// TTL-Cleanup (2026-09-09, P0-Roadmap): Der SW stirbt nach ~30s, deshalb
+// Cleanup via chrome.alarms (12h-Periode, weckt den SW). Raeumt:
+//   ka_recorder   -- Aufnahme 7 Tage nach letzter Aktivitaet (nach dem
+//                    Download bleibt der Datensatz sonst endlos liegen)
+//   ka_enrich_cache -- Eintraege aelter als 7 Tage TTL
+// Dedup/Frische der aktiven Features bleibt unangetastet; geloescht wird
+// nur, was ueber die TTL hinaus niemand mehr braucht.
+// ------------------------------------------------------------------
+const KA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const KA_CLEANUP_ALARM = 'ka_ttl_cleanup';
+
+async function kaTtlCleanup() {
+    const now = Date.now();
+    const rec = await KAStorage.get('ka_recorder');
+    if (rec && rec.order && rec.order.length && rec.recording !== true) {
+        const stamp = Date.parse(rec.updatedAt || rec.startedAt || '');
+        if (stamp && now - stamp > KA_TTL_MS) {
+            await KAStorage.set('ka_recorder', { recording: false, ads: {}, order: [] });
+            console.log('[KA Background] ka_recorder geraeumt (TTL 7d nach letzter Aktivitaet)');
+        }
+    }
+    const cache = await KAStorage.get('ka_enrich_cache');
+    if (cache && typeof cache === 'object') {
+        let dropped = 0;
+        for (const [id, v] of Object.entries(cache)) {
+            if (v && v.fetchedAt && now - v.fetchedAt > KA_TTL_MS) {
+                delete cache[id];
+                dropped++;
+            }
+        }
+        if (dropped) {
+            await KAStorage.set('ka_enrich_cache', cache);
+            console.log(`[KA Background] ka_enrich_cache: ${dropped} Eintraege abgelaufen (TTL 7d)`);
+        }
+    }
+}
+
+chrome.alarms.create(KA_CLEANUP_ALARM, { periodInMinutes: 720 });
+chrome.alarms.onAlarm.addListener((a) => {
+    if (a.name === KA_CLEANUP_ALARM) kaTtlCleanup().catch((e) => console.error('[KA Background] Cleanup-Fehler:', e));
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Download-Brücke (P0-Roadmap, chrome.downloads statt Blob-a.click):
+    // Content-Scripts duerfen die downloads-API nicht aufrufen -> Message.
+    // Fehlerfall: Content-Script faellt auf sein a.click()-Verfahren zurueck.
+    if (request.action === 'kaDownload' && request.url) {
+        chrome.downloads.download({ url: request.url, filename: request.filename, saveAs: false }, (id) => {
+            if (chrome.runtime.lastError) {
+                sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+            } else {
+                sendResponse({ ok: true, id });
+            }
+        });
+        return true;
+    }
     if (request.action === 'kaApiGetAd') {
         kaApiQueued(`/ads/${request.id}.json`, {})
             .then(raw => sendResponse({ ok: true, ad: normalizeAdResponse(raw) }))

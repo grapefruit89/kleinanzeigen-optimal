@@ -86,6 +86,30 @@
                                 renderContextInvalidatedNotice(content);
                             }
                         });
+                        // P0-Härtung (2026-09-09): Token nicht mehr per console.log
+                        // (Leak in McpBridge) -- abholbar per Klick hier.
+                        if (mod.id === 'feature_McpBridge') {
+                            const tokenBtn = document.createElement('button');
+                            tokenBtn.textContent = 'Token kopieren';
+                            tokenBtn.style.cssText = 'margin-top:6px;padding:3px 8px;font-size:12px;border:1px solid #888;border-radius:4px;background:transparent;cursor:pointer;';
+                            tokenBtn.addEventListener('click', async () => {
+                                const s = await KAStorage.get('ka_settings', {});
+                                const t = (s && s.mcp_bridge_token) || '';
+                                if (!t) {
+                                    tokenBtn.textContent = 'Kein Token — Bridge einmal aktivieren';
+                                    setTimeout(() => { tokenBtn.textContent = 'Token kopieren'; }, 2500);
+                                    return;
+                                }
+                                try {
+                                    await navigator.clipboard.writeText(t);
+                                    tokenBtn.textContent = 'Kopiert!';
+                                } catch (e) {
+                                    tokenBtn.textContent = t; // Clipboard verweigert: anzeigen
+                                }
+                                setTimeout(() => { tokenBtn.textContent = 'Token kopieren'; }, 2500);
+                            });
+                            item.querySelector('.ka-module-info').appendChild(tokenBtn);
+                        }
                         content.appendChild(item);
                     });
                 } catch (e) {
