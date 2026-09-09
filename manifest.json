@@ -8,10 +8,14 @@
     "unlimitedStorage",
     "alarms",
     "downloads",
+    "sidePanel",
     "activeTab",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback"
   ],
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  },
   "host_permissions": [
     "https://www.kleinanzeigen.de/*",
     "https://api.kleinanzeigen.de/*"
@@ -32,7 +36,7 @@
     "default_icon": {
       "128": "icons/icon128.png"
     },
-    "default_popup": "popup/popup.html"
+    "default_title": "KA Analyzer öffnen (SidePanel rechts)"
   },
   "icons": {
     "128": "icons/icon128.png"

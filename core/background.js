@@ -13,6 +13,25 @@ chrome.declarativeNetRequest
     .catch((e) => console.error('[KA Background] Ruleset-Aktivierung fehlgeschlagen:', e));
 
 // ------------------------------------------------------------------
+// SidePanel als Zentrale (2026-09-09, P1-Roadmap): Toolbar-Button öffnet
+// das Panel (Popup entfällt), Panel fix auf der RECHTEN Seite. Guarded:
+// setOptions 'side' braucht neuere Chrome-Versionen (>=131); bei Fehlern
+// default-seite bleibt einfach links/rechts nach Browser-Sitte.
+// ------------------------------------------------------------------
+chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .then(() => console.log('[KA Background] SidePanel: Toolbar-Button oeffnet Panel'))
+    .catch((e) => console.error('[KA Background] SidePanel-Behavior fehlgeschlagen:', e));
+try {
+    chrome.sidePanel
+        .setOptions({ side: 'right' })
+        .then(() => console.log('[KA Background] SidePanel: Seite RECHTS fixiert'))
+        .catch((e) => console.warn('[KA Background] SidePanel side=right nicht unterstuetzt:', e.message));
+} catch (e) {
+    console.warn('[KA Background] SidePanel-API nicht verfuegbar:', e.message);
+}
+
+// ------------------------------------------------------------------
 // Mobile-API-Client (2026-09-09, Discovery siehe docs/kleinanzeigen-api.md)
 // Die Android-App-API (api.kleinanzeigen.de/api) braucht keine Session --
 // statische App-Credentials reichen. Der Service-Worker fetcht CORS-frei
