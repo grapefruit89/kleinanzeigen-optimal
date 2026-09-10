@@ -169,3 +169,13 @@ Docs. Querverweise: `docs/kleinanzeigen-api.md`, `ROADMAP.md`, `docs/antipattern
 | Apify Store Actors (clearpath, memo23, lowlanddata, unfenced, santamaria) | Bezahl-/Cloud-Modell | AP-03; Schema-Referenz in §8 |
 | Playwright/Headless-Server-Modell (Sprayer115, DanielWTE als Datenweg) | AP-02 | — |
 | Maps-Embeds (Plus-1.0.2-Pattern) | AP-17, User-Mandat | `docs/antipatterns.md` |
+
+### [CoolerControl Releases](https://gitlab.com/coolercontrol/coolercontrol/-/releases) — coolercontrol (GitLab) *(2026-09-09, vom User)*
+- **Status:** referenz
+- **Übernahme:** Release-/Changelog-SSOT für CoolerControl (lokal: 5.0.0-2.fc44). Relevante 5.0-Änderung: REST-Endpunkt-Schema umgebaut (`/devices/{uid}/settings/{channel}/manual` statt `/device/{uid}/channel/{name}`).
+- **Wo:** Obsidian `nobara/2026-09-09-nobara-desktop-fixes-github-sync.md` (CoolerControl-Sektion, Fan-Optimierung)
+
+### [context7: coolercontrol](https://context7.com/gitlab_coolercontrol/coolercontrol) — Context7-Library
+- **Status:** referenz
+- **Übernahme:** Context7-Library-ID `gitlab_coolercontrol/coolercontrol` für künftige API-Referenz-Lookups (OpenAPI-Spec als SSOT).
+- **Wo:** wie oben (CoolerControl-API-Arbeit)
