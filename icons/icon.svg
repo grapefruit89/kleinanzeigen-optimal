@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hintergrund: Abgerundetes Quadrat in Himmelblau -->
+  <rect width="128" height="128" rx="28" fill="#87CEEB"/>
+  
+  <!-- Das "k" Symbol (Stilisiert wie Kleinanzeigen, aber weiß) -->
+  <path d="M40 35V93M40 64L80 35M40 64L80 93" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Analyse-Lupen-Kreis unten rechts -->
+  <circle cx="95" cy="95" r="22" fill="white" stroke="#87CEEB" stroke-width="4"/>
+  <path d="M90 95H100M95 90V100" stroke="#87CEEB" stroke-width="4" stroke-linecap="round"/>
+</svg>
