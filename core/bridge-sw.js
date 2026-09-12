@@ -213,11 +213,21 @@
                 return;
             }
             try {
-                ws = new WebSocket('ws://127.0.0.1:8765');
+                // LNA-Bestandsschutz (Chrome 154+, Grok-Review 10.09.2026):
+                // targetAddressSpace markiert die Verbindung explizit als
+                // Loopback, bevor Chrome LNA-Gating auch auf WebSockets
+                // anwendet (crbug 421156866). Chromium <154 wirft bei einem
+                // Objekt als zweitem Argument (war bislang "protocols") --
+                // deshalb Fallback ohne Annotation.
+                ws = new WebSocket('ws://127.0.0.1:8765', { targetAddressSpace: 'loopback' });
             } catch (e) {
-                connecting = false;
-                scheduleReconnect();
-                return;
+                try {
+                    ws = new WebSocket('ws://127.0.0.1:8765');
+                } catch (e2) {
+                    connecting = false;
+                    scheduleReconnect();
+                    return;
+                }
             }
             ws.onopen = () => {
                 console.log('[KA Bridge-SW] Verbunden mit 127.0.0.1:8765 (JSON-RPC 2.0)');

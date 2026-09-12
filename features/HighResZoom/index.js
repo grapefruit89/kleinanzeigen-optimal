@@ -170,7 +170,9 @@ KAFeatureManager.register('HighResZoom', () => {
         const panel = document.createElement('div');
         panel.id = 'ka-preview-stats';
         const rows = [];
-        if (ad.title) rows.push(`<div class="ka-ps-title">${ad.title}</div>`);
+        // Interpolationen laufen durch KAEsc: title/location/category/accountType
+        // sind fremde Nutzerdaten aus der Mobile-API (XSS-Hygiene, 10.09.2026).
+        if (ad.title) rows.push(`<div class="ka-ps-title">${KAEsc(ad.title)}</div>`);
         if (ad.price) {
             const p = [];
             if (ad.price.amount != null) p.push(ad.price.amount.toLocaleString('de-DE') + ' €');
@@ -178,12 +180,12 @@ KAFeatureManager.register('HighResZoom', () => {
             if (ad.price.originalAmount != null) p.push(`<s style="opacity:.6">${ad.price.originalAmount.toLocaleString('de-DE')} €</s>`);
             if (p.length) rows.push(`<div class="ka-ps-price">${p.join(' · ')}</div>`);
         }
-        if (ad.location) rows.push(`<div class="ka-ps-row">📍 ${ad.location.name || ''}</div>`);
+        if (ad.location) rows.push(`<div class="ka-ps-row">📍 ${KAEsc(ad.location.name || '')}</div>`);
         if (ad.startDateTime) rows.push(`<div class="ka-ps-row">🗓 online seit ${fmtDate(ad.startDateTime)}</div>`);
-        if (ad.category) rows.push(`<div class="ka-ps-row">🏷 ${ad.category.name || ''}</div>`);
+        if (ad.category) rows.push(`<div class="ka-ps-row">🏷 ${KAEsc(ad.category.name || '')}</div>`);
         if (ad.seller) {
             const s = ad.seller;
-            rows.push(`<div class="ka-ps-row">👤 ${s.accountType || '?'}${s.rating != null ? ` · ★${Number(s.rating).toFixed(1)}` : ''}</div>`);
+            rows.push(`<div class="ka-ps-row">👤 ${KAEsc(s.accountType || '?')}${s.rating != null ? ` · ★${Number(s.rating).toFixed(1)}` : ''}</div>`);
             if (s.since) rows.push(`<div class="ka-ps-row">🕒 Konto seit ${fmtDate(s.since)}</div>`);
         }
         panel.innerHTML = rows.join('');

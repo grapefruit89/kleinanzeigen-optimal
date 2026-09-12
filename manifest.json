@@ -45,6 +45,7 @@
       "matches": ["https://www.kleinanzeigen.de/*"],
       "js": [
         "core/FeatureManager.js",
+        "core/safeHtml.js",
         "core/kaApi.js",
         "core/kaApiNormalize.js",
         "core/anchors.js",
