@@ -72,7 +72,9 @@ const KleinanzeigenAnalyzer = {
 
         const regionalMatrix = this.getHistoricalRegionalMatrix(currentAdsData, db);
         KAUI.updateDashboard(globalStats, regionalMatrix, db, currentAdsData.length);
-        KANavigation.updateVisibleAds(currentAdsData.map(d => d.ad));
+        // Kopplung zu WasdNavigation entfernt (Grok-Review 10.09.2026):
+        // updateVisibleAds() nimmt gar kein Argument und scannt selbst
+        // article[data-adid] -- der Call war tot und koppelte zwei Module.
     },
 
     categoryOf() {

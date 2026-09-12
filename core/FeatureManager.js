@@ -23,4 +23,9 @@ const KAFeatureManager = {
     }
 };
 
-KAFeatureManager.run();
+// run() wird NICHT mehr hier automatisch gefeuert: Diese Datei steht im
+// Manifest vorgeschlagen VOR allen Feature-Dateien -- der Aufruf lief, bevor
+// register() stattfand (sie funktionierte nur, weil KAStorage.get asynchron
+// ist => Zufallsarchitektur, Grok-Review 10.09.2026). Das explizite Boot
+// geschieht in features/index.js, dem LETZTEN Eintrag des Content-Script-
+// Arrays im manifest.json.

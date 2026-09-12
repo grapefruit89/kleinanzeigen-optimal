@@ -10,8 +10,7 @@
     "downloads",
     "sidePanel",
     "activeTab",
-    "declarativeNetRequest",
-    "declarativeNetRequestFeedback"
+    "declarativeNetRequest"
   ],
   "side_panel": {
     "default_path": "sidepanel/panel.html"
@@ -66,7 +65,8 @@
         "features/DataExport/index.js",
         "features/McpBridge/index.js",
         "features/BadgeRemover/index.js",
-        "features/AdRecorder/index.js"
+        "features/AdRecorder/index.js",
+        "features/index.js"
       ],
       "css": [
         "features/RentalAnalyzer/style.css",
