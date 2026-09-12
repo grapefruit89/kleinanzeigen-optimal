@@ -54,15 +54,17 @@ Object.assign(KASource, {
     },
 
     // ---- Eine Karte -> Ad --------------------------------------
+    // _parsePrice lebt HIER (einzige Stelle, Grok-Review 10.09.2026) --
+    // fromPayload ueberschreibt nichts mehr.
     _mapAd(p) {
-        const price = this._parsePrice(p.price);
+        const { price, priceType } = this._parsePrice(p.price);
         const attrs = Array.isArray(p.attributes) ? p.attributes.map(String) : [];
         return {
             id: typeof p.id === 'number' ? p.id : parseInt(p.id, 10) || null,
             url: typeof p.seoLink === 'string' ? p.seoLink : null,
             title: typeof p.title === 'string' ? p.title : '',
-            price: typeof p.price === 'number' ? p.price : null,
-            priceType: 'other',
+            price,
+            priceType,
             categoryId: this._parseCategory(p.seoLink),
             plz: /^\d{5}$/.test(p.locationName || '') ? p.locationName : null,
             city: typeof p.parentLocationName === 'string' ? p.parentLocationName : null,
@@ -87,12 +89,7 @@ Object.assign(KASource, {
             if (!e || typeof e !== 'object') continue;
             const p = e.organicAdPreview;
             if (p && typeof p === 'object' && (typeof p.id === 'number' || typeof p.id === 'string')) {
-                const { price, priceType } = this._parsePrice(p.price);
-                ads.push({
-                    ...this._mapAd(p),
-                    price,
-                    priceType,
-                });
+                ads.push(this._mapAd(p));
             }
             // sponsoredAd-Marker: kein Ad-Datensatz, bewusst skippen (ProAd-
             // Sponsoring-Versteck-Reihenfolge kommt spaeter aus positionName).

@@ -11,13 +11,15 @@
 //   resultAds = [1, [ [0, {sponsoredAdPresent...|organicAdPreview...}], ... ]]
 // Parser in core/source.js dekodiert das; KEIN querySelector auf Titel/Preis.
 //
-// Status (wasPayload/fromDocument-Rueckgabe):
+// Status (fromPayload/fromDocument-Rueckgabe):
 //   ok           -- Ads gefunden, Schema passt
-//   empty        -- valide Struktur, aber 0 Ads (echte leere Suche)
-//   stale_schema -- Island/props vorhanden, aber erwartete Felder fehlen
-//                   (KA hat den Blob geaendert -> sichtbar machen, NICHT
+//   empty        -- valide Struktur, aber 0 organische Ads (echte leere Suche
+//                   oder nur Sponsor-Slot-Marker)
+//   stale_schema -- Blob da, aber erwartete Felder fehlen ODER kein Island,
+//                   obwohl sichtbare Karten (article[data-adid]) existieren
+//                   (KA hat Layout/Blob geaendert -> sichtbar machen, NICHT
 //                   heimlich auf DOM-Fallback fallen)
-//   unavailable  -- kein resultAds-Island auf der Seite
+//   unavailable  -- kein resultAds-Island UND keine Karten (keine SRP)
 
 /**
  * @typedef {Object} Ad

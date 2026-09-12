@@ -1,6 +1,6 @@
 # Kleinanzeigen Optimal — Projekt-Mandat
 
-SSOT fuer `features/`, `core/`, `popup/`. Pfade `lib/` und `content/` gibt es nicht mehr.
+SSOT fuer `features/` und `core/`. Pfade `lib/`, `content/` und `popup/` gibt es nicht mehr.
 
 ## Verhaltensrichtlinien (Karpathy-Prinzipien, 2026-09-09 uebernommen)
 
