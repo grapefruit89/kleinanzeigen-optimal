@@ -136,7 +136,9 @@ const KAUI = {
                 listItem.style.display = ''; ad.classList.remove('ka-filtered');
             } else {
                 const hasPriceClass = ad.classList.contains(`ka-price-${this.activeCategory}`);
-                const adPlz = KARentalParser.extract(ad)?.plzFull || "";
+                // PLZ aus dem dataset, das run() beim Markieren setzt
+                // (Datenlayer-Umbau: kein On-Demand-Parser-Text-Scrape mehr)
+                const adPlz = ad.dataset.kaPlz || "";
                 const hasPlzMatch = adPlz.startsWith(plz.replace('X', ''));
                 const matches = hasPriceClass && hasPlzMatch;
                 listItem.style.display = matches ? '' : 'none';

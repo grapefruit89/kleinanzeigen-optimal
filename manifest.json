@@ -42,7 +42,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.kleinanzeigen.de/*"],
+      "matches": [
+        "https://www.kleinanzeigen.de/*"
+      ],
       "js": [
         "core/FeatureManager.js",
         "core/safeHtml.js",
@@ -51,7 +53,6 @@
         "core/anchors.js",
         "core/ad.js",
         "core/source.js",
-        "features/RentalAnalyzer/parser.js",
         "features/RentalAnalyzer/stats.js",
         "features/RentalAnalyzer/ui.js",
         "features/RentalAnalyzer/enrich.js",
@@ -83,9 +84,16 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://www.kleinanzeigen.de/*"],
-      "js": ["core/Storage.js", "features/InPageMenu/index.js"],
-      "css": ["features/InPageMenu/style.css"],
+      "matches": [
+        "https://www.kleinanzeigen.de/*"
+      ],
+      "js": [
+        "core/Storage.js",
+        "features/InPageMenu/index.js"
+      ],
+      "css": [
+        "features/InPageMenu/style.css"
+      ],
       "run_at": "document_start"
     }
   ]
